@@ -5,7 +5,7 @@ import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { COLORS, RADIUS, SPACING } from "@/src/theme";
-import { api, Product } from "@/src/api";
+import { api, fileUrl, Product } from "@/src/api";
 import { brl } from "@/src/format";
 
 const CATS = [
@@ -69,7 +69,7 @@ export default function Menu() {
             onPress={() => router.push({ pathname: "/product/[id]", params: { id: item.id } })}
             style={styles.card}
           >
-            <Image source={{ uri: item.image_url }} style={styles.img} contentFit="cover" />
+            <Image source={{ uri: fileUrl(item.image_url) }} style={styles.img} contentFit="cover" />
             <View style={{ flex: 1, gap: 4 }}>
               <View style={styles.tagRow}>
                 <View style={[styles.tag, item.category === "congelado" ? styles.tagBlue : styles.tagBrand]}>

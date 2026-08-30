@@ -2,11 +2,12 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft, CaretDown, X } from "phosphor-react-native";
+import { ArrowLeft, CaretDown, ChatCircleText, Gear, X } from "phosphor-react-native";
 
 import { COLORS, RADIUS, SPACING } from "@/src/theme";
 import { api, Motoboy, Order } from "@/src/api";
 import { brl, statusLabel, timeAgo } from "@/src/format";
+import { openWhatsApp, orderStatusMessage } from "@/src/whatsapp";
 
 const STATUS_FLOW: Order["status"][] = ["recebido", "fritando", "saiu_entrega", "entregue", "cancelado"];
 
@@ -42,6 +43,9 @@ export default function Admin() {
           <Text style={styles.title}>Painel Admin</Text>
           <Text style={styles.subtitle}>{orders.length} pedidos totais</Text>
         </View>
+        <Pressable testID="admin-settings" onPress={() => router.push("/staff/settings")} style={styles.iconBtn}>
+          <Gear color={COLORS.onSurface} size={20} weight="regular" />
+        </Pressable>
       </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
@@ -85,6 +89,14 @@ export default function Admin() {
                 <Text style={styles.actionSecText}>{item.motoboy_name ? "Trocar" : "Atribuir"} motoboy</Text>
               </Pressable>
             </View>
+            <Pressable
+              testID={`admin-whatsapp-${item.id}`}
+              onPress={() => openWhatsApp(item.customer.phone, orderStatusMessage(item, process.env.EXPO_PUBLIC_BACKEND_URL || ""))}
+              style={styles.waBtn}
+            >
+              <ChatCircleText color="#25D366" size={16} weight="fill" />
+              <Text style={styles.waText}>Avisar cliente pelo WhatsApp</Text>
+            </Pressable>
           </View>
         )}
       />
@@ -183,6 +195,11 @@ const styles = StyleSheet.create({
   actionText: { fontSize: 12, fontWeight: "800" },
   actionSec: { flex: 1, paddingVertical: 10, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: COLORS.brand, alignItems: "center" },
   actionSecText: { fontSize: 12, fontWeight: "800", color: COLORS.brand },
+  waBtn: {
+    marginTop: SPACING.sm, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 6,
+    paddingVertical: 10, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: "#25D366", backgroundColor: "#E9F9EF",
+  },
+  waText: { fontSize: 12, fontWeight: "800", color: "#128C7E" },
   backdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: COLORS.overlay },
   sheet: { backgroundColor: COLORS.surface, borderTopLeftRadius: RADIUS.lg, borderTopRightRadius: RADIUS.lg, padding: SPACING.lg, gap: SPACING.sm, paddingBottom: SPACING.xxl },
   sheetHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: SPACING.sm },

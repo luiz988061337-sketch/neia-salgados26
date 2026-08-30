@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowLeft, Trash, ShoppingBagOpen } from "phosphor-react-native";
 
 import { COLORS, RADIUS, SPACING } from "@/src/theme";
-import { CartItem, getCart, saveCart } from "@/src/api";
+import { CartItem, fileUrl, getCart, saveCart } from "@/src/api";
 import { brl } from "@/src/format";
 
 export default function Cart() {
@@ -50,7 +50,7 @@ export default function Cart() {
         }
         renderItem={({ item, index }) => (
           <View testID={`cart-item-${index}`} style={styles.card}>
-            <Image source={{ uri: item.image_url }} style={styles.img} contentFit="cover" />
+            <Image source={{ uri: fileUrl(item.image_url) }} style={styles.img} contentFit="cover" />
             <View style={{ flex: 1, gap: 4 }}>
               <Text style={styles.name} numberOfLines={2}>{item.product_name}</Text>
               <Text style={styles.qty}>{item.quantity} un</Text>

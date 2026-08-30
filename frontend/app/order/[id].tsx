@@ -2,12 +2,13 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft, CheckCircle, Fire, House, Motorcycle, Phone, Receipt } from "phosphor-react-native";
+import { ArrowLeft, ChatCircleText, CheckCircle, Fire, House, Motorcycle, Phone, Receipt } from "phosphor-react-native";
 
 import { COLORS, RADIUS, SPACING } from "@/src/theme";
 import { api, Order } from "@/src/api";
 import { brl, statusLabel, timeAgo } from "@/src/format";
 import MotoboyMap from "@/src/components/MotoboyMap";
+import { openWhatsApp, orderStatusMessage } from "@/src/whatsapp";
 
 const STEPS: { key: Order["status"]; label: string; icon: any }[] = [
   { key: "recebido", label: "Recebido", icon: Receipt },
@@ -62,6 +63,15 @@ export default function OrderTracking() {
             <Text style={styles.successText}>Pedido recebido com sucesso! A Néia já foi notificada.</Text>
           </View>
         )}
+
+        <Pressable
+          testID="share-order-whatsapp"
+          onPress={() => openWhatsApp(order.customer.phone, orderStatusMessage(order, process.env.EXPO_PUBLIC_BACKEND_URL || ""))}
+          style={styles.waShare}
+        >
+          <ChatCircleText color="#25D366" size={18} weight="fill" />
+          <Text style={styles.waShareText}>Compartilhar pedido no WhatsApp</Text>
+        </Pressable>
 
         {/* Timeline */}
         <View style={styles.timeline}>
@@ -140,6 +150,12 @@ const styles = StyleSheet.create({
   time: { fontSize: 11, color: COLORS.muted },
   successBanner: { flexDirection: "row", gap: SPACING.sm, alignItems: "center", backgroundColor: "#DFF0E7", padding: SPACING.md, margin: SPACING.lg, borderRadius: RADIUS.md },
   successText: { flex: 1, color: COLORS.success, fontWeight: "700", fontSize: 13 },
+  waShare: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    marginHorizontal: SPACING.lg, paddingVertical: 12, borderRadius: RADIUS.pill,
+    backgroundColor: "#E9F9EF", borderWidth: 1, borderColor: "#25D366",
+  },
+  waShareText: { color: "#128C7E", fontWeight: "800", fontSize: 13 },
   blockTitle: { fontSize: 14, fontWeight: "800", color: COLORS.onSurface },
   timeline: { padding: SPACING.lg },
   step: { flexDirection: "row", alignItems: "center", gap: SPACING.md },

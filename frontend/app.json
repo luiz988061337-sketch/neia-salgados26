@@ -13,7 +13,9 @@
       "bundleIdentifier": "com.emergent.neiasalgadosapp.yodpjg",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Enviar sua posição durante entregas",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Enviar sua posição durante entregas"
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Enviar sua posição durante entregas",
+        "NSPhotoLibraryUsageDescription": "Selecionar fotos dos salgados",
+        "NSCameraUsageDescription": "Tirar fotos dos salgados"
       }
     },
     "android": {
@@ -25,7 +27,9 @@
       "package": "com.emergent.neiasalgadosapp.yodpjg",
       "permissions": [
         "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION"
+        "ACCESS_FINE_LOCATION",
+        "CAMERA",
+        "READ_MEDIA_IMAGES"
       ]
     },
     "web": {
@@ -48,6 +52,13 @@
         "expo-location",
         {
           "locationAlwaysAndWhenInUsePermission": "Compartilhar sua localização com clientes durante entregas"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Selecionar fotos dos salgados",
+          "cameraPermission": "Tirar fotos dos salgados"
         }
       ]
     ],

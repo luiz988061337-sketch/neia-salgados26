@@ -1,6 +1,8 @@
 import { storage } from "@/src/utils/storage";
+import { Platform } from "react-native";
 
 const API = `${process.env.EXPO_PUBLIC_BACKEND_URL}/api`;
+export const BACKEND_ORIGIN = process.env.EXPO_PUBLIC_BACKEND_URL || "";
 
 async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API}${path}`, {
@@ -27,6 +29,8 @@ export type Product = {
   image_url: string;
   flavors: string[];
   is_featured: boolean;
+  theme?: string | null;
+  active?: boolean;
 };
 
 export type CartItem = {
@@ -40,10 +44,13 @@ export type CartItem = {
   image_url: string;
 };
 
+export type Neighborhood = { id: string; name: string; delivery_fee: number; active: boolean };
+export type Theme = { id: string; name: string; label: string; emoji: string; banner_image?: string; active: boolean };
+
 export type Order = {
   id: string;
   short_code: string;
-  customer: { name: string; phone: string; address: string; complement?: string };
+  customer: { name: string; phone: string; address: string; complement?: string; neighborhood_id?: string; neighborhood_name?: string };
   items: CartItem[];
   subtotal: number;
   delivery_fee: number;
@@ -63,9 +70,18 @@ export type Order = {
 
 export type Motoboy = { id: string; name: string; phone: string; photo_url?: string; current_lat?: number; current_lng?: number };
 
+export function fileUrl(pathOrUrl: string) {
+  if (!pathOrUrl) return "";
+  if (pathOrUrl.startsWith("http")) return pathOrUrl;
+  // Backend returns something like "/api/files/neia-salgados/uploads/..."
+  return `${BACKEND_ORIGIN}${pathOrUrl}`;
+}
+
 export const api = {
   listProducts: (category?: string) => req<Product[]>(`/products${category ? `?category=${category}` : ""}`),
   getProduct: (id: string) => req<Product>(`/products/${id}`),
+  listNeighborhoods: () => req<Neighborhood[]>("/neighborhoods"),
+  listActiveThemes: () => req<Theme[]>("/themes/active"),
   createOrder: (body: any) => req<Order>("/orders", { method: "POST", body: JSON.stringify(body) }),
   getOrder: (id: string) => req<Order>(`/orders/${id}`),
   listOrdersByPhone: (phone: string) => req<Order[]>(`/orders?phone=${encodeURIComponent(phone)}`),
@@ -87,6 +103,34 @@ export const api = {
   adminAssign: (id: string, motoboy_id: string) =>
     req(`/admin/orders/${id}/assign`, { method: "POST", body: JSON.stringify({ motoboy_id }) }),
   adminMotoboys: () => req<Motoboy[]>("/admin/motoboys"),
+  adminProducts: () => req<Product[]>("/admin/products"),
+  adminUpdateProduct: (id: string, body: Partial<Product>) =>
+    req(`/admin/products/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  adminNeighborhoods: () => req<Neighborhood[]>("/admin/neighborhoods"),
+  adminCreateNeighborhood: (body: { name: string; delivery_fee: number; active?: boolean }) =>
+    req<Neighborhood>("/admin/neighborhoods", { method: "POST", body: JSON.stringify(body) }),
+  adminUpdateNeighborhood: (id: string, body: any) =>
+    req(`/admin/neighborhoods/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  adminDeleteNeighborhood: (id: string) =>
+    req(`/admin/neighborhoods/${id}`, { method: "DELETE" }),
+  adminThemes: () => req<Theme[]>("/admin/themes"),
+  adminToggleTheme: (id: string, active: boolean) =>
+    req(`/admin/themes/${id}/toggle`, { method: "PATCH", body: JSON.stringify({ active }) }),
+  async adminUploadImage(uri: string, name: string, type: string): Promise<{ path: string; url: string }> {
+    const form = new FormData();
+    if (Platform.OS === "web") {
+      const blob = await (await fetch(uri)).blob();
+      form.append("file", blob, name);
+    } else {
+      form.append("file", { uri, name, type } as any);
+    }
+    const res = await fetch(`${API}/admin/upload`, { method: "POST", body: form as any });
+    const text = await res.text();
+    let data: any;
+    try { data = JSON.parse(text); } catch { data = text; }
+    if (!res.ok) throw new Error(data?.detail || `Erro ${res.status}`);
+    return data;
+  },
 };
 
 // -- Cart persistence

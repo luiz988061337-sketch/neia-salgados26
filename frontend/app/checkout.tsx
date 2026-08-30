@@ -2,10 +2,10 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft, CheckCircle, CreditCard, Money, QrCode } from "phosphor-react-native";
+import { ArrowLeft, CheckCircle, CreditCard, Money, QrCode, MapPin } from "phosphor-react-native";
 
 import { COLORS, RADIUS, SPACING } from "@/src/theme";
-import { api, CartItem, clearCart, getCart, getCustomer, saveCustomer } from "@/src/api";
+import { api, CartItem, clearCart, getCart, getCustomer, Neighborhood, saveCustomer } from "@/src/api";
 import { brl } from "@/src/format";
 
 type Payment = "pix" | "dinheiro" | "cartao";
@@ -18,6 +18,8 @@ export default function Checkout() {
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [complement, setComplement] = useState("");
+  const [neighborhoods, setNeighborhoods] = useState<Neighborhood[]>([]);
+  const [neighborhoodId, setNeighborhoodId] = useState<string>("");
   const [payment, setPayment] = useState<Payment>("pix");
   const [changeFor, setChangeFor] = useState("");
   const [coupon, setCoupon] = useState("");
@@ -28,13 +30,22 @@ export default function Checkout() {
 
   useFocusEffect(useCallback(() => {
     getCart().then(setItems);
+    api.listNeighborhoods().then((n) => {
+      setNeighborhoods(n);
+      if (n.length && !neighborhoodId) setNeighborhoodId(n[0].id);
+    }).catch(() => {});
     getCustomer().then((c: any) => {
-      if (c) { setName(c.name || ""); setPhone(c.phone || ""); setAddress(c.address || ""); setComplement(c.complement || ""); }
+      if (c) {
+        setName(c.name || ""); setPhone(c.phone || ""); setAddress(c.address || "");
+        setComplement(c.complement || "");
+        if (c.neighborhood_id) setNeighborhoodId(c.neighborhood_id);
+      }
     });
   }, []));
 
+  const selectedNbh = neighborhoods.find((n) => n.id === neighborhoodId);
   const subtotal = items.reduce((s, i) => s + i.subtotal, 0);
-  const delivery = 8.0;
+  const delivery = selectedNbh?.delivery_fee ?? 8.0;
   const discount = Number((subtotal * (couponPct / 100)).toFixed(2));
   const total = subtotal + delivery - discount;
 
@@ -49,9 +60,10 @@ export default function Checkout() {
 
   const submit = async () => {
     if (!name || !phone || !address) { setError("Preencha nome, telefone e endereço"); return; }
+    if (!neighborhoodId) { setError("Selecione o bairro de entrega"); return; }
     setSubmitting(true); setError("");
     try {
-      const cust = { name, phone, address, complement };
+      const cust = { name, phone, address, complement, neighborhood_id: neighborhoodId };
       await saveCustomer(cust);
       const order = await api.createOrder({
         customer: cust,
@@ -85,8 +97,29 @@ export default function Checkout() {
         </Section>
 
         <Section title="Endereço de entrega">
-          <Input testID="address-input" label="Rua, número, bairro, cidade" value={address} onChangeText={setAddress} multiline />
+          <Input testID="address-input" label="Rua, número, cidade" value={address} onChangeText={setAddress} multiline />
           <Input testID="complement-input" label="Complemento (apto, referência)" value={complement} onChangeText={setComplement} />
+          <Text style={[styles.fieldLabel, { marginTop: 6 }]}>Bairro (taxa por bairro)</Text>
+          <View style={{ gap: SPACING.sm }}>
+            {neighborhoods.map((n) => {
+              const active = n.id === neighborhoodId;
+              return (
+                <Pressable
+                  key={n.id}
+                  testID={`nbh-${n.id}`}
+                  onPress={() => setNeighborhoodId(n.id)}
+                  style={[styles.nbhRow, active && styles.nbhRowActive]}
+                >
+                  <MapPin color={active ? COLORS.brand : COLORS.muted} size={18} weight={active ? "fill" : "regular"} />
+                  <Text style={[styles.nbhName, active && { fontWeight: "800" }]}>{n.name}</Text>
+                  <Text style={[styles.nbhFee, active && { color: COLORS.brand }]}>{brl(n.delivery_fee)}</Text>
+                </Pressable>
+              );
+            })}
+            {neighborhoods.length === 0 && (
+              <Text style={{ color: COLORS.muted, fontSize: 12 }}>Nenhum bairro cadastrado ainda.</Text>
+            )}
+          </View>
         </Section>
 
         <Section title="Pagamento">
@@ -127,7 +160,7 @@ export default function Checkout() {
 
         <View style={styles.summary}>
           <SumRow label="Subtotal" val={brl(subtotal)} />
-          <SumRow label="Taxa de entrega" val={brl(delivery)} />
+          <SumRow label={`Entrega${selectedNbh ? ` • ${selectedNbh.name}` : ""}`} val={brl(delivery)} />
           {discount > 0 && <SumRow label={`Cupom (${couponPct}%)`} val={`- ${brl(discount)}`} success />}
           <View style={styles.hr} />
           <View style={styles.totalRow}>
@@ -202,6 +235,13 @@ const styles = StyleSheet.create({
   couponInput: { flex: 1, backgroundColor: COLORS.surfaceSecondary, borderRadius: RADIUS.md, paddingHorizontal: SPACING.md, paddingVertical: 12, fontSize: 14, color: COLORS.onSurface },
   couponBtn: { paddingHorizontal: SPACING.lg, backgroundColor: COLORS.onSurface, borderRadius: RADIUS.md, alignItems: "center", justifyContent: "center" },
   couponBtnText: { color: COLORS.surface, fontWeight: "800", fontSize: 13 },
+  nbhRow: {
+    flexDirection: "row", alignItems: "center", gap: SPACING.md, padding: SPACING.md,
+    borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface,
+  },
+  nbhRowActive: { borderColor: COLORS.brand, backgroundColor: COLORS.brandTertiary },
+  nbhName: { flex: 1, fontSize: 14, fontWeight: "600", color: COLORS.onSurface },
+  nbhFee: { fontSize: 14, fontWeight: "800", color: COLORS.onSurface },
   couponOk: { flexDirection: "row", alignItems: "center", gap: 6 },
   couponOkText: { color: COLORS.success, fontSize: 12, fontWeight: "700" },
   summary: { padding: SPACING.md, backgroundColor: COLORS.surfaceSecondary, borderRadius: RADIUS.md, gap: 2 },

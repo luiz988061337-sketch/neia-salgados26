@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowLeft, CheckCircle, Minus, Plus } from "phosphor-react-native";
 
 import { COLORS, RADIUS, SPACING } from "@/src/theme";
-import { api, CartItem, getCart, Product, saveCart } from "@/src/api";
+import { api, CartItem, fileUrl, getCart, Product, saveCart } from "@/src/api";
 import { brl } from "@/src/format";
 
 export default function ProductDetail() {
@@ -80,7 +80,7 @@ export default function ProductDetail() {
     <View style={styles.root}>
       <ScrollView contentContainerStyle={{ paddingBottom: 200 }} showsVerticalScrollIndicator={false}>
         <View style={styles.heroWrap}>
-          <Image source={{ uri: product.image_url }} style={styles.hero} contentFit="cover" />
+          <Image source={{ uri: fileUrl(product.image_url) }} style={styles.hero} contentFit="cover" />
           <LinearGradient colors={["rgba(28,25,23,0.4)", "transparent"]} style={{ ...StyleSheet.absoluteFillObject, height: 100 }} />
           <Pressable testID="back-btn" onPress={() => router.back()} style={[styles.backBtn, { top: insets.top + 8 }]}>
             <ArrowLeft color={COLORS.onSurface} size={20} weight="bold" />

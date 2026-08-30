@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowRight, Fire, ShoppingBag, Storefront } from "phosphor-react-native";
 
 import { COLORS, RADIUS, SPACING } from "@/src/theme";
-import { api, getCart, Product } from "@/src/api";
+import { api, fileUrl, getCart, Product, Theme } from "@/src/api";
 import { brl } from "@/src/format";
 
 export default function Home() {
@@ -15,9 +15,11 @@ export default function Home() {
   const router = useRouter();
   const [products, setProducts] = useState<Product[]>([]);
   const [cartCount, setCartCount] = useState(0);
+  const [themes, setThemes] = useState<Theme[]>([]);
 
   useEffect(() => {
     api.listProducts().then(setProducts).catch(() => {});
+    api.listActiveThemes().then(setThemes).catch(() => {});
     getCart().then((c) => setCartCount(c.reduce((s, i) => s + i.quantity, 0)));
   }, []);
 
@@ -41,6 +43,21 @@ export default function Home() {
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+        {themes.length > 0 && (
+          <View style={styles.themeBanners}>
+            {themes.map((t) => (
+              <Pressable key={t.id} testID={`theme-banner-${t.name}`} onPress={() => router.push("/(tabs)/menu")} style={styles.themeBanner}>
+                <Text style={styles.themeEmoji}>{t.emoji}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.themeLabel}>Cardápio {t.label}</Text>
+                  <Text style={styles.themeSub}>Combos temáticos por tempo limitado</Text>
+                </View>
+                <ArrowRight color={COLORS.onBrandTertiary} size={18} weight="bold" />
+              </Pressable>
+            ))}
+          </View>
+        )}
+
         {/* Hero */}
         <Pressable
           testID="hero-card"
@@ -83,7 +100,7 @@ export default function Home() {
               onPress={() => router.push({ pathname: "/product/[id]", params: { id: item.id } })}
               style={styles.featCard}
             >
-              <Image source={{ uri: item.image_url }} style={styles.featImg} contentFit="cover" />
+              <Image source={{ uri: fileUrl(item.image_url) }} style={styles.featImg} contentFit="cover" />
               <View style={{ padding: SPACING.md, gap: 4 }}>
                 <Text style={styles.featName} numberOfLines={1}>{item.name}</Text>
                 <Text style={styles.featPrice}>{brl(item.price)}</Text>
@@ -102,7 +119,7 @@ export default function Home() {
               onPress={() => router.push({ pathname: "/product/[id]", params: { id: p.id } })}
               style={styles.row}
             >
-              <Image source={{ uri: p.image_url }} style={styles.rowImg} contentFit="cover" />
+              <Image source={{ uri: fileUrl(p.image_url) }} style={styles.rowImg} contentFit="cover" />
               <View style={{ flex: 1, gap: 4 }}>
                 <View style={styles.badge50}>
                   <Text style={styles.badge50Text}>50 em 50</Text>
@@ -194,4 +211,9 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.md, backgroundColor: COLORS.brandTertiary,
   },
   seeMoreText: { color: COLORS.brand, fontWeight: "800", fontSize: 14 },
+  themeBanners: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.sm, gap: SPACING.sm },
+  themeBanner: { flexDirection: "row", alignItems: "center", gap: SPACING.md, padding: SPACING.md, backgroundColor: COLORS.brandTertiary, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.brand },
+  themeEmoji: { fontSize: 26 },
+  themeLabel: { fontSize: 15, fontWeight: "800", color: COLORS.onBrandTertiary },
+  themeSub: { fontSize: 12, color: COLORS.onBrandTertiary, marginTop: 2 },
 });
