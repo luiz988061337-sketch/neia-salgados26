@@ -92,8 +92,8 @@ class TestOrders:
         assert r.status_code == 200, r.text
         data = r.json()
         assert data["subtotal"] > 0
-        assert data["delivery_fee"] == 8.0
-        assert data["total"] == round(data["subtotal"] + 8.0 - data["discount"], 2)
+        assert data["delivery_fee"] >= 6.0  # per-km min or bairro fee
+        assert data["total"] == round(data["subtotal"] + data["delivery_fee"] - data["discount"], 2)
         assert data["status"] == "recebido"
         # Verify persistence via GET
         r2 = s.get(f"{API}/orders/{data['id']}")

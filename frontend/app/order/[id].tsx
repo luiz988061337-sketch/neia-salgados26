@@ -73,6 +73,14 @@ export default function OrderTracking() {
           <Text style={styles.waShareText}>Compartilhar pedido no WhatsApp</Text>
         </Pressable>
 
+        {order.scheduled_for && (
+          <View style={styles.scheduleBadge}>
+            <Text style={styles.scheduleText}>
+              🗓️ Agendado para {new Date(order.scheduled_for).toLocaleString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+            </Text>
+          </View>
+        )}
+
         {/* Timeline */}
         <View style={styles.timeline}>
           <Text style={styles.blockTitle}>Status do Pedido</Text>
@@ -156,6 +164,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#E9F9EF", borderWidth: 1, borderColor: "#25D366",
   },
   waShareText: { color: "#128C7E", fontWeight: "800", fontSize: 13 },
+  scheduleBadge: { marginHorizontal: SPACING.lg, marginTop: SPACING.md, padding: SPACING.md, borderRadius: RADIUS.md, backgroundColor: "#FFE9D3" },
+  scheduleText: { color: COLORS.warning, fontWeight: "800", fontSize: 13, textAlign: "center" },
   blockTitle: { fontSize: 14, fontWeight: "800", color: COLORS.onSurface },
   timeline: { padding: SPACING.lg },
   step: { flexDirection: "row", alignItems: "center", gap: SPACING.md },

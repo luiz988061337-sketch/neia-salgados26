@@ -1,7 +1,7 @@
 import { useRouter } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft, CaretRight, ForkKnife, MapPin, Sparkle } from "phosphor-react-native";
+import { ArrowLeft, CaretRight, ForkKnife, MapPin, Ranking, Sparkle, Storefront } from "phosphor-react-native";
 
 import { COLORS, RADIUS, SPACING } from "@/src/theme";
 
@@ -21,6 +21,20 @@ export default function StaffSettings() {
 
       <ScrollView contentContainerStyle={{ padding: SPACING.lg, gap: SPACING.md }}>
         <Row
+          testID="go-store"
+          icon={<Storefront color={COLORS.brand} size={22} weight="fill" />}
+          title="Loja & Taxa por km"
+          subtitle="Localização da loja, taxa base e por km, aviso automático"
+          onPress={() => router.push("/staff/store")}
+        />
+        <Row
+          testID="go-ranking"
+          icon={<Ranking color={COLORS.brand} size={22} weight="fill" />}
+          title="Ranking de Motoboys"
+          subtitle="Quem entregou mais rápido hoje"
+          onPress={() => router.push("/staff/ranking")}
+        />
+        <Row
           testID="go-products"
           icon={<ForkKnife color={COLORS.brand} size={22} weight="fill" />}
           title="Cardápio & Fotos"
@@ -30,8 +44,8 @@ export default function StaffSettings() {
         <Row
           testID="go-neighborhoods"
           icon={<MapPin color={COLORS.brand} size={22} weight="fill" />}
-          title="Bairros de Entrega"
-          subtitle="Cadastre bairros atendidos com taxa própria"
+          title="Bairros (legado)"
+          subtitle="Cadastro antigo por bairro — sobrepõe a taxa por km quando definido"
           onPress={() => router.push("/staff/neighborhoods")}
         />
         <Row

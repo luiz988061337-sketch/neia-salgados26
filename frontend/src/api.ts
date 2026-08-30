@@ -46,23 +46,39 @@ export type CartItem = {
 
 export type Neighborhood = { id: string; name: string; delivery_fee: number; active: boolean };
 export type Theme = { id: string; name: string; label: string; emoji: string; banner_image?: string; active: boolean };
+export type Settings = {
+  store_name: string; store_address: string;
+  store_lat: number; store_lng: number;
+  base_delivery_fee: number; per_km_fee: number;
+  min_delivery_fee: number; max_delivery_km: number;
+  auto_whatsapp?: boolean; admin_phone?: string;
+};
+export type RankingItem = {
+  motoboy_id: string; name: string; phone: string;
+  deliveries: number; avg_minutes: number | null; revenue: number;
+};
 
 export type Order = {
   id: string;
   short_code: string;
-  customer: { name: string; phone: string; address: string; complement?: string; neighborhood_id?: string; neighborhood_name?: string };
+  customer: { name: string; phone: string; address: string; complement?: string;
+             neighborhood_id?: string; neighborhood_name?: string;
+             delivery_lat?: number; delivery_lng?: number };
   items: CartItem[];
   subtotal: number;
   delivery_fee: number;
+  distance_km?: number | null;
   discount: number;
   total: number;
   payment_method: "pix" | "dinheiro" | "cartao";
   change_for?: number | null;
   coupon_code?: string | null;
+  scheduled_for?: string | null;
   status: "recebido" | "fritando" | "saiu_entrega" | "entregue" | "cancelado";
   motoboy_id?: string | null;
   motoboy_name?: string | null;
   notes?: string;
+  delivered_at?: string | null;
   created_at: string;
   updated_at: string;
   motoboy_location?: { lat: number; lng: number; last_ping: string; name: string; phone: string } | null;
@@ -116,6 +132,12 @@ export const api = {
   adminThemes: () => req<Theme[]>("/admin/themes"),
   adminToggleTheme: (id: string, active: boolean) =>
     req(`/admin/themes/${id}/toggle`, { method: "PATCH", body: JSON.stringify({ active }) }),
+  getSettings: () => req<Settings>("/settings"),
+  adminGetSettings: () => req<Settings>("/admin/settings"),
+  adminUpdateSettings: (body: Partial<Settings>) =>
+    req<Settings>("/admin/settings", { method: "PATCH", body: JSON.stringify(body) }),
+  adminMotoboysRanking: (date?: string) =>
+    req<{ date: string; ranking: RankingItem[] }>(`/admin/motoboys/ranking${date ? `?date=${date}` : ""}`),
   async adminUploadImage(uri: string, name: string, type: string): Promise<{ path: string; url: string }> {
     const form = new FormData();
     if (Platform.OS === "web") {

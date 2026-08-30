@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowLeft, CaretDown, ChatCircleText, Gear, X } from "phosphor-react-native";
 
 import { COLORS, RADIUS, SPACING } from "@/src/theme";
-import { api, Motoboy, Order } from "@/src/api";
+import { api, Motoboy, Order, Settings } from "@/src/api";
 import { brl, statusLabel, timeAgo } from "@/src/format";
 import { openWhatsApp, orderStatusMessage } from "@/src/whatsapp";
 
@@ -16,6 +16,7 @@ export default function Admin() {
   const router = useRouter();
   const [orders, setOrders] = useState<Order[]>([]);
   const [motoboys, setMotoboys] = useState<Motoboy[]>([]);
+  const [settings, setSettings] = useState<Settings | null>(null);
   const [filter, setFilter] = useState<string>("all");
   const [assignFor, setAssignFor] = useState<Order | null>(null);
   const [statusFor, setStatusFor] = useState<Order | null>(null);
@@ -23,6 +24,7 @@ export default function Admin() {
   const load = async () => {
     try { setOrders(await api.adminOrders()); } catch {}
     try { setMotoboys(await api.adminMotoboys()); } catch {}
+    try { setSettings(await api.adminGetSettings()); } catch {}
   };
 
   useEffect(() => {
@@ -72,6 +74,12 @@ export default function Admin() {
             </View>
             <Text style={styles.customer}>{item.customer.name} • {item.customer.phone}</Text>
             <Text style={styles.address} numberOfLines={2}>{item.customer.address}</Text>
+            {item.distance_km != null && <Text style={styles.meta}>📍 {item.distance_km} km da loja</Text>}
+            {item.scheduled_for && (
+              <Text style={styles.metaSchedule}>
+                🗓️ Agendado {new Date(item.scheduled_for).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+              </Text>
+            )}
             <Text style={styles.itemsLine}>
               {item.items.map((i) => `${i.quantity}x ${i.product_name}`).join(", ")}
             </Text>
@@ -114,7 +122,15 @@ export default function Admin() {
                 key={s}
                 testID={`status-opt-${s}`}
                 onPress={async () => {
-                  if (statusFor) { await api.adminUpdateStatus(statusFor.id, s); setStatusFor(null); load(); }
+                  if (statusFor) {
+                    await api.adminUpdateStatus(statusFor.id, s);
+                    const updated = { ...statusFor, status: s as any };
+                    setStatusFor(null);
+                    if (settings?.auto_whatsapp) {
+                      openWhatsApp(updated.customer.phone, orderStatusMessage(updated, process.env.EXPO_PUBLIC_BACKEND_URL || ""));
+                    }
+                    load();
+                  }
                 }}
                 style={styles.sheetOpt}
               >
@@ -186,6 +202,8 @@ const styles = StyleSheet.create({
   time: { fontSize: 11, color: COLORS.muted },
   customer: { fontSize: 13, fontWeight: "700", color: COLORS.onSurface },
   address: { fontSize: 12, color: COLORS.muted },
+  meta: { fontSize: 11, color: COLORS.info, fontWeight: "700", marginTop: 2 },
+  metaSchedule: { fontSize: 11, color: COLORS.warning, fontWeight: "800", marginTop: 2 },
   itemsLine: { fontSize: 12, color: COLORS.onSurfaceSecondary, marginTop: 4 },
   footRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 4 },
   total: { fontSize: 14, fontWeight: "800", color: COLORS.brand },

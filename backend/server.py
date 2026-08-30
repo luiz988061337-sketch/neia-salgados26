@@ -4,13 +4,14 @@ from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+import math
 import logging
 import requests
 from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional, Literal
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 
 ROOT_DIR = Path(__file__).parent
@@ -66,8 +67,10 @@ class Customer(BaseModel):
     phone: str
     address: str
     complement: Optional[str] = ""
-    neighborhood_id: Optional[str] = None
+    neighborhood_id: Optional[str] = None  # deprecated, kept for legacy
     neighborhood_name: Optional[str] = None
+    delivery_lat: Optional[float] = None
+    delivery_lng: Optional[float] = None
 
 
 class Order(BaseModel):
@@ -77,15 +80,18 @@ class Order(BaseModel):
     items: List[OrderItem]
     subtotal: float
     delivery_fee: float = 0.0
+    distance_km: Optional[float] = None
     discount: float = 0.0
     total: float
     payment_method: PaymentMethod
     change_for: Optional[float] = None
     coupon_code: Optional[str] = None
+    scheduled_for: Optional[str] = None  # ISO datetime; when the customer wants delivery
     status: OrderStatus = "recebido"
     motoboy_id: Optional[str] = None
     motoboy_name: Optional[str] = None
     notes: Optional[str] = ""
+    delivered_at: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
@@ -126,6 +132,20 @@ class OrderCreate(BaseModel):
     change_for: Optional[float] = None
     coupon_code: Optional[str] = None
     notes: Optional[str] = ""
+    scheduled_for: Optional[str] = None
+
+
+class SettingsIn(BaseModel):
+    store_name: Optional[str] = None
+    store_lat: Optional[float] = None
+    store_lng: Optional[float] = None
+    store_address: Optional[str] = None
+    base_delivery_fee: Optional[float] = None  # até 3 km
+    per_km_fee: Optional[float] = None         # cada km adicional
+    min_delivery_fee: Optional[float] = None
+    max_delivery_km: Optional[float] = None
+    auto_whatsapp: Optional[bool] = None
+    admin_phone: Optional[str] = None
 
 
 class MotoboyLogin(BaseModel):
@@ -180,6 +200,47 @@ class ProductPatch(BaseModel):
 
 
 # ============ STORAGE HELPERS ============
+def haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    R = 6371.0
+    rlat1, rlat2 = math.radians(lat1), math.radians(lat2)
+    dlat = math.radians(lat2 - lat1)
+    dlng = math.radians(lng2 - lng1)
+    a = math.sin(dlat / 2) ** 2 + math.cos(rlat1) * math.cos(rlat2) * math.sin(dlng / 2) ** 2
+    return 2 * R * math.asin(math.sqrt(a))
+
+
+async def get_settings() -> dict:
+    doc = await db.settings.find_one({"id": "singleton"}, {"_id": 0})
+    if doc:
+        return doc
+    default = {
+        "id": "singleton",
+        "store_name": "Néia Salgados",
+        "store_address": "Av. Paulista, 1000 — São Paulo/SP",
+        "store_lat": -23.5613,
+        "store_lng": -46.6558,
+        "base_delivery_fee": 6.0,   # até 3 km
+        "per_km_fee": 2.0,          # cada km acima de 3
+        "min_delivery_fee": 6.0,
+        "max_delivery_km": 15.0,
+        "auto_whatsapp": True,
+        "admin_phone": "",
+    }
+    await db.settings.insert_one(default)
+    return default
+
+
+def compute_delivery(distance_km: Optional[float], settings: dict) -> float:
+    if distance_km is None:
+        return float(settings.get("min_delivery_fee", 6.0))
+    base = float(settings.get("base_delivery_fee", 6.0))
+    per_km = float(settings.get("per_km_fee", 2.0))
+    min_fee = float(settings.get("min_delivery_fee", 6.0))
+    extra = max(0.0, distance_km - 3.0)  # base cobre até 3 km
+    fee = base + extra * per_km
+    return round(max(fee, min_fee), 2)
+
+
 def _init_storage() -> str:
     global _storage_key
     if _storage_key:
@@ -349,6 +410,79 @@ async def list_neighborhoods():
     return docs
 
 
+# --- Settings (public + admin)
+@api_router.get("/settings")
+async def get_public_settings():
+    s = await get_settings()
+    return {
+        "store_name": s.get("store_name"),
+        "store_address": s.get("store_address"),
+        "store_lat": s.get("store_lat"),
+        "store_lng": s.get("store_lng"),
+        "base_delivery_fee": s.get("base_delivery_fee"),
+        "per_km_fee": s.get("per_km_fee"),
+        "min_delivery_fee": s.get("min_delivery_fee"),
+        "max_delivery_km": s.get("max_delivery_km"),
+    }
+
+
+@api_router.get("/admin/settings")
+async def get_admin_settings():
+    return await get_settings()
+
+
+@api_router.patch("/admin/settings")
+async def update_admin_settings(body: SettingsIn):
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    if not updates:
+        raise HTTPException(400, "Nada para atualizar")
+    await db.settings.update_one({"id": "singleton"}, {"$set": updates}, upsert=True)
+    return await get_settings()
+
+
+# --- Motoboys ranking
+@api_router.get("/admin/motoboys/ranking")
+async def motoboys_ranking(date: Optional[str] = None):
+    """Ranking do dia. Data no formato YYYY-MM-DD (UTC). Sem date = hoje."""
+    if date:
+        try:
+            day = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        except ValueError:
+            raise HTTPException(400, "Data inválida (use YYYY-MM-DD)")
+    else:
+        now = datetime.now(timezone.utc)
+        day = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+    next_day = day + timedelta(days=1)
+
+    motos = await db.motoboys.find({"active": True}, {"_id": 0, "password": 0}).to_list(50)
+    results = []
+    for m in motos:
+        cursor = db.orders.find({
+            "motoboy_id": m["id"],
+            "status": "entregue",
+            "delivered_at": {"$gte": day.isoformat(), "$lt": next_day.isoformat()},
+        }, {"_id": 0, "created_at": 1, "delivered_at": 1, "total": 1})
+        deliveries = []
+        async for o in cursor:
+            try:
+                created = datetime.fromisoformat(o["created_at"].replace("Z", "+00:00"))
+                delivered = datetime.fromisoformat(o["delivered_at"].replace("Z", "+00:00"))
+                mins = (delivered - created).total_seconds() / 60
+                deliveries.append({"minutes": round(mins, 1), "total": float(o.get("total", 0))})
+            except Exception:
+                continue
+        count = len(deliveries)
+        avg_minutes = round(sum(d["minutes"] for d in deliveries) / count, 1) if count else None
+        revenue = round(sum(d["total"] for d in deliveries), 2)
+        results.append({
+            "motoboy_id": m["id"], "name": m["name"], "phone": m["phone"],
+            "deliveries": count, "avg_minutes": avg_minutes, "revenue": revenue,
+        })
+    # Sort: fewer avg minutes first (None goes last), then more deliveries first
+    results.sort(key=lambda r: (r["avg_minutes"] is None, r["avg_minutes"] or 0, -r["deliveries"]))
+    return {"date": day.strftime("%Y-%m-%d"), "ranking": results}
+
+
 # --- Themes
 @api_router.get("/themes")
 async def list_themes():
@@ -375,17 +509,26 @@ async def create_order(payload: OrderCreate):
 
     subtotal = sum(i.subtotal for i in payload.items)
 
-    # Delivery fee from neighborhood
-    delivery_fee = 8.0
-    neighborhood_name = None
+    settings = await get_settings()
+    distance_km: Optional[float] = None
+    if payload.customer.delivery_lat is not None and payload.customer.delivery_lng is not None:
+        distance_km = round(
+            haversine_km(
+                float(settings["store_lat"]), float(settings["store_lng"]),
+                float(payload.customer.delivery_lat), float(payload.customer.delivery_lng),
+            ), 2,
+        )
+        max_km = float(settings.get("max_delivery_km", 15.0))
+        if distance_km > max_km:
+            raise HTTPException(400, f"Endereço fora da área de entrega ({distance_km} km, máx {max_km} km).")
+
+    # Legacy: keep bairros working when passed
+    delivery_fee = compute_delivery(distance_km, settings)
     if payload.customer.neighborhood_id:
         n = await db.neighborhoods.find_one({"id": payload.customer.neighborhood_id, "active": True}, {"_id": 0})
         if n:
             delivery_fee = float(n["delivery_fee"])
-            neighborhood_name = n["name"]
-        else:
-            raise HTTPException(400, "Bairro inválido")
-    payload.customer.neighborhood_name = neighborhood_name
+            payload.customer.neighborhood_name = n["name"]
 
     discount = 0.0
     if payload.coupon_code:
@@ -401,12 +544,14 @@ async def create_order(payload: OrderCreate):
         items=payload.items,
         subtotal=round(subtotal, 2),
         delivery_fee=delivery_fee,
+        distance_km=distance_km,
         discount=discount,
         total=total,
         payment_method=payload.payment_method,
         change_for=payload.change_for,
         coupon_code=payload.coupon_code.upper() if payload.coupon_code else None,
         notes=payload.notes,
+        scheduled_for=payload.scheduled_for,
     )
     await db.orders.insert_one(order.model_dump())
     return order.model_dump()
@@ -492,7 +637,7 @@ async def complete_delivery(motoboy_id: str, order_id: str):
     now = datetime.now(timezone.utc).isoformat()
     r = await db.orders.update_one(
         {"id": order_id, "motoboy_id": motoboy_id},
-        {"$set": {"status": "entregue", "updated_at": now}}
+        {"$set": {"status": "entregue", "updated_at": now, "delivered_at": now}}
     )
     if r.matched_count == 0:
         raise HTTPException(404, "Pedido não encontrado")
@@ -519,7 +664,10 @@ async def admin_list_orders(status: Optional[str] = None):
 @api_router.patch("/admin/orders/{order_id}/status")
 async def admin_update_status(order_id: str, body: StatusUpdate):
     now = datetime.now(timezone.utc).isoformat()
-    r = await db.orders.update_one({"id": order_id}, {"$set": {"status": body.status, "updated_at": now}})
+    updates = {"status": body.status, "updated_at": now}
+    if body.status == "entregue":
+        updates["delivered_at"] = now
+    r = await db.orders.update_one({"id": order_id}, {"$set": updates})
     if r.matched_count == 0:
         raise HTTPException(404, "Pedido não encontrado")
     return {"ok": True}
