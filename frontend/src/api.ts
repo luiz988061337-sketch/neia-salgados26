@@ -172,6 +172,9 @@ export const api = {
   listNotifications: (phone: string) => req<{ unread: number; items: AppNotification[] }>(`/notifications?phone=${encodeURIComponent(phone)}`),
   markAllRead: (phone: string) => req(`/notifications/read-all?phone=${encodeURIComponent(phone)}`, { method: "POST" }),
   adminAnalytics: (period: "today" | "week" | "month") => req<Analytics>(`/admin/analytics?period=${period}`),
+  getMe: (phone: string) => req<any>(`/customers/me?phone=${encodeURIComponent(phone)}`),
+  rateOrder: (id: string, stars: number, comment: string) =>
+    req(`/orders/${id}/rating`, { method: "POST", body: JSON.stringify({ stars, comment }) }),
   async adminUploadImage(uri: string, name: string, type: string): Promise<{ path: string; url: string }> {
     const form = new FormData();
     if (Platform.OS === "web") {

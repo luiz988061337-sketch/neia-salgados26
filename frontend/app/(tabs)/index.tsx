@@ -119,6 +119,19 @@ export default function Home() {
 
         {/* Featured */}
         <Text style={styles.sectionTitle}>Destaques</Text>
+
+        <Pressable
+          testID="build-combo-cta"
+          onPress={() => router.push("/build-combo")}
+          style={styles.buildCta}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={styles.buildTitle}>🥟 Monte seu Combo</Text>
+            <Text style={styles.buildSub}>Escolha os sabores fritos que quiser em múltiplos de 50</Text>
+          </View>
+          <ArrowRight color={COLORS.surface} size={20} weight="bold" />
+        </Pressable>
+
         <FlatList
           data={featured}
           keyExtractor={(i) => i.id}
@@ -260,4 +273,7 @@ const styles = StyleSheet.create({
   closedEmoji: { fontSize: 26 },
   closedTitle: { fontSize: 14, fontWeight: "800", color: COLORS.warning },
   closedSub: { fontSize: 12, color: COLORS.warning, marginTop: 2 },
+  buildCta: { flexDirection: "row", alignItems: "center", gap: SPACING.md, marginHorizontal: SPACING.lg, marginBottom: SPACING.md, padding: SPACING.md, backgroundColor: COLORS.brand, borderRadius: RADIUS.md },
+  buildTitle: { fontSize: 15, fontWeight: "800", color: COLORS.surface },
+  buildSub: { fontSize: 12, color: COLORS.surface, opacity: 0.85, marginTop: 2 },
 });

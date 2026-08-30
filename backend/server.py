@@ -145,7 +145,8 @@ class Order(BaseModel):
     payment_method: PaymentMethod
     change_for: Optional[float] = None
     coupon_code: Optional[str] = None
-    scheduled_for: Optional[str] = None  # ISO datetime; when the customer wants delivery
+    referral_code_used: Optional[str] = None
+    scheduled_for: Optional[str] = None
     status: OrderStatus = "recebido"
     motoboy_id: Optional[str] = None
     motoboy_name: Optional[str] = None
@@ -190,6 +191,7 @@ class OrderCreate(BaseModel):
     payment_method: PaymentMethod
     change_for: Optional[float] = None
     coupon_code: Optional[str] = None
+    referral_code_used: Optional[str] = None
     notes: Optional[str] = ""
     scheduled_for: Optional[str] = None
 
@@ -216,6 +218,11 @@ class ChatMessageIn(BaseModel):
     order_id: str
     from_role: Literal["customer", "motoboy"]
     text: str
+
+
+class RatingIn(BaseModel):
+    stars: int
+    comment: Optional[str] = ""
 
 
 class MotoboyLogin(BaseModel):
@@ -611,6 +618,32 @@ async def admin_analytics(period: str = "today"):
     }
 
 
+@api_router.get("/customers/me")
+async def customer_me(phone: str):
+    c = await db.customers.find_one({"phone": phone}, {"_id": 0})
+    if not c:
+        return {"phone": phone, "referral_code": None, "referrals_used": 0, "credits": []}
+    code = c.get("referral_code")
+    referrals_used = await db.orders.count_documents({"referral_code_used": code}) if code else 0
+    credits = await db.coupons.find(
+        {"belongs_to": phone, "active": True}, {"_id": 0}
+    ).to_list(50)
+    return {**c, "referrals_used": referrals_used, "credits": credits}
+
+
+@api_router.post("/orders/{order_id}/rating")
+async def rate_order(order_id: str, body: RatingIn):
+    stars = max(1, min(5, int(body.stars)))
+    r = await db.orders.update_one(
+        {"id": order_id},
+        {"$set": {"rating_stars": stars, "rating_comment": (body.comment or "")[:500],
+                  "rated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    if r.matched_count == 0:
+        raise HTTPException(404, "Pedido não encontrado")
+    return {"ok": True}
+
+
 # --- Chat between customer and motoboy per order
 @api_router.get("/orders/{order_id}/messages")
 async def list_messages(order_id: str, since: Optional[str] = None):
@@ -883,6 +916,30 @@ async def create_order(payload: OrderCreate):
             discount = code_disc
             applied_coupon = payload.coupon_code.upper()
 
+    # Referral logic — new customer's first order using someone's code
+    referral_used = payload.referral_code_used.strip().upper() if payload.referral_code_used else None
+    referral_owner = None
+    if referral_used:
+        # code format: AMIGO-XXXX
+        referral_owner = await db.customers.find_one({"referral_code": referral_used}, {"_id": 0})
+        if referral_owner:
+            if referral_owner.get("phone") == payload.customer.phone:
+                referral_used = None
+                referral_owner = None
+            else:
+                prev_count = await db.orders.count_documents({"customer.phone": payload.customer.phone})
+                if prev_count > 0:
+                    # Only valid on very first order
+                    referral_used = None
+                    referral_owner = None
+
+    if referral_used:
+        # 10% off for new customer
+        referral_disc = round(subtotal * 0.10, 2)
+        if referral_disc > discount:
+            discount = referral_disc
+            applied_coupon = f"INDIC{referral_used}"
+
     total = round(subtotal + delivery_fee - discount, 2)
 
     order = Order(
@@ -896,26 +953,49 @@ async def create_order(payload: OrderCreate):
         payment_method=payload.payment_method,
         change_for=payload.change_for,
         coupon_code=applied_coupon,
+        referral_code_used=referral_used,
         notes=payload.notes,
         scheduled_for=payload.scheduled_for,
     )
     await db.orders.insert_one(order.model_dump())
 
-    # Upsert customer profile
-    await db.customers.update_one(
-        {"phone": payload.customer.phone},
-        {"$set": {
-            "phone": payload.customer.phone,
-            "name": payload.customer.name,
-            "birthday": payload.customer.birthday,
-            "whatsapp_opt_in": bool(payload.customer.whatsapp_opt_in),
-            "last_address": payload.customer.address,
-            "last_lat": payload.customer.delivery_lat,
-            "last_lng": payload.customer.delivery_lng,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        }},
-        upsert=True,
-    )
+    # Upsert customer profile + auto-generate referral code on first save
+    existing = await db.customers.find_one({"phone": payload.customer.phone}, {"_id": 0})
+    ref_code = existing.get("referral_code") if existing else None
+    if not ref_code:
+        digits = "".join(ch for ch in payload.customer.phone if ch.isdigit())[-4:] or str(uuid.uuid4())[:4]
+        ref_code = f"AMIGO-{digits}"
+    updates = {
+        "phone": payload.customer.phone,
+        "name": payload.customer.name,
+        "birthday": payload.customer.birthday,
+        "whatsapp_opt_in": bool(payload.customer.whatsapp_opt_in),
+        "last_address": payload.customer.address,
+        "last_lat": payload.customer.delivery_lat,
+        "last_lng": payload.customer.delivery_lng,
+        "referral_code": ref_code,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.customers.update_one({"phone": payload.customer.phone}, {"$set": updates}, upsert=True)
+
+    # Reward referrer: create a personal coupon (10% off) once
+    if referral_used and referral_owner:
+        owner_phone = referral_owner["phone"]
+        credit_code = f"AMIGO{owner_phone[-4:]}-{payload.customer.phone[-4:]}"
+        existing_credit = await db.coupons.find_one({"code": credit_code})
+        if not existing_credit:
+            await db.coupons.insert_one({
+                "code": credit_code, "discount_percent": 10, "active": True,
+                "belongs_to": owner_phone, "reason": "referral",
+                "referred_customer": payload.customer.phone,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+        await create_notification(
+            phone=owner_phone,
+            title="🎉 Amigo pediu na Néia!",
+            body=f"{payload.customer.name} usou seu código {ref_code}. Você ganhou o cupom {credit_code} com 10% off!",
+            kind="referral",
+        )
 
     return order.model_dump()
 

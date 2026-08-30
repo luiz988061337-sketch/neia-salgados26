@@ -22,6 +22,7 @@ export default function Checkout() {
   const [address, setAddress] = useState("");
   const [complement, setComplement] = useState("");
   const [birthday, setBirthday] = useState(""); // MM-DD or empty
+  const [referralCode, setReferralCode] = useState("");
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -87,6 +88,7 @@ export default function Checkout() {
         customer: cust, items, payment_method: payment,
         change_for: payment === "dinheiro" && changeFor ? Number(changeFor.replace(",", ".")) : null,
         coupon_code: couponPct ? coupon.toUpperCase() : null,
+        referral_code_used: referralCode.trim() || null,
         notes,
         scheduled_for: scheduleEnabled ? scheduled.toISOString() : null,
       });
@@ -127,6 +129,11 @@ export default function Checkout() {
           <Input
             testID="birthday-input" label="Aniversário — MM-DD (opcional, para cupom especial 🎂)"
             value={birthday} onChangeText={setBirthday} placeholder="03-15" maxLength={5}
+          />
+          <Input
+            testID="referral-input" label="Código de indicação (opcional — 10% off no 1º pedido)"
+            value={referralCode} onChangeText={(t) => setReferralCode(t.toUpperCase())} placeholder="AMIGO-1234"
+            autoCapitalize="characters"
           />
         </Section>
 
