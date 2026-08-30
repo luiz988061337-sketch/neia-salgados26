@@ -4,7 +4,7 @@ import { Alert, FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, TextIn
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
-import { ArrowLeft, Camera, ImageSquare, Star, X } from "phosphor-react-native";
+import { ArrowLeft, Camera, ImageSquare, Plus, Star, Trash, X } from "phosphor-react-native";
 
 import { COLORS, RADIUS, SPACING } from "@/src/theme";
 import { api, fileUrl, Product, Theme } from "@/src/api";
@@ -21,6 +21,7 @@ export default function StaffProducts() {
   const [description, setDescription] = useState("");
   const [priceStr, setPriceStr] = useState("");
   const [imageUrl, setImageUrl] = useState("");
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [themeName, setThemeName] = useState<string | null>(null);
   const [isFeatured, setIsFeatured] = useState(false);
 
@@ -34,11 +35,13 @@ export default function StaffProducts() {
     setEditing(p);
     setName(p.name); setDescription(p.description);
     setPriceStr(String(p.price).replace(".", ","));
-    setImageUrl(p.image_url); setThemeName(p.theme || null);
+    setImageUrl(p.image_url);
+    setImageUrls(p.image_urls || []);
+    setThemeName(p.theme || null);
     setIsFeatured(!!p.is_featured);
   };
 
-  const pick = async (fromCamera: boolean) => {
+  const pick = async (fromCamera: boolean, target: "main" | "gallery" = "main") => {
     const perm = fromCamera
       ? await ImagePicker.requestCameraPermissionsAsync()
       : await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -54,11 +57,14 @@ export default function StaffProducts() {
     try {
       setSaving(true);
       const up = await api.adminUploadImage(a.uri, a.fileName || `p-${Date.now()}.jpg`, a.mimeType || "image/jpeg");
-      setImageUrl(up.url);
+      if (target === "main") setImageUrl(up.url);
+      else setImageUrls((v) => [...v, up.url]);
     } catch (e: any) {
       Alert.alert("Falha no upload", e.message || "Tente novamente");
     } finally { setSaving(false); }
   };
+
+  const removeGalleryPhoto = (url: string) => setImageUrls((v) => v.filter((u) => u !== url));
 
   const save = async () => {
     if (!editing) return;
@@ -68,6 +74,7 @@ export default function StaffProducts() {
         name, description,
         price: Number(priceStr.replace(",", ".")),
         image_url: imageUrl,
+        image_urls: imageUrls,
         theme: themeName || null,
         is_featured: isFeatured,
       } as any);
@@ -125,15 +132,32 @@ export default function StaffProducts() {
                 )}
               </Pressable>
               <View style={styles.pickRow}>
-                <Pressable testID="pick-gallery" onPress={() => pick(false)} style={styles.pickBtn}>
+                <Pressable testID="pick-gallery" onPress={() => pick(false, "main")} style={styles.pickBtn}>
                   <ImageSquare color={COLORS.brand} size={18} />
                   <Text style={styles.pickBtnText}>Galeria</Text>
                 </Pressable>
-                <Pressable testID="pick-camera" onPress={() => pick(true)} style={styles.pickBtn}>
+                <Pressable testID="pick-camera" onPress={() => pick(true, "main")} style={styles.pickBtn}>
                   <Camera color={COLORS.brand} size={18} />
                   <Text style={styles.pickBtnText}>Câmera</Text>
                 </Pressable>
               </View>
+
+              <Field label={`Fotos em rodízio (${imageUrls.length})`}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: SPACING.sm, paddingVertical: 4 }}>
+                  {imageUrls.map((u) => (
+                    <View key={u} style={styles.thumbWrap}>
+                      <Image source={{ uri: fileUrl(u) }} style={styles.thumb} contentFit="cover" />
+                      <Pressable testID={`rm-gallery-${u}`} onPress={() => removeGalleryPhoto(u)} style={styles.thumbRm}>
+                        <Trash color={COLORS.surface} size={14} weight="bold" />
+                      </Pressable>
+                    </View>
+                  ))}
+                  <Pressable testID="add-gallery" onPress={() => pick(false, "gallery")} style={styles.thumbAdd}>
+                    <Plus color={COLORS.brand} size={22} weight="bold" />
+                    <Text style={styles.thumbAddText}>Adicionar</Text>
+                  </Pressable>
+                </ScrollView>
+              </Field>
 
               <Field label="Nome"><TextInput testID="p-name" value={name} onChangeText={setName} style={styles.input} /></Field>
               <Field label="Descrição"><TextInput testID="p-desc" value={description} onChangeText={setDescription} multiline style={[styles.input, { minHeight: 80 }]} /></Field>
@@ -217,4 +241,9 @@ const styles = StyleSheet.create({
   knobOn: { transform: [{ translateX: 18 }] },
   saveBtn: { backgroundColor: COLORS.brand, paddingVertical: SPACING.md, borderRadius: RADIUS.pill, alignItems: "center", marginTop: SPACING.md },
   saveBtnText: { color: COLORS.surface, fontWeight: "800", fontSize: 15 },
+  thumbWrap: { position: "relative" },
+  thumb: { width: 84, height: 84, borderRadius: RADIUS.md, backgroundColor: COLORS.surfaceSecondary },
+  thumbRm: { position: "absolute", top: -6, right: -6, width: 24, height: 24, borderRadius: 12, backgroundColor: COLORS.error, alignItems: "center", justifyContent: "center" },
+  thumbAdd: { width: 84, height: 84, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.brand, borderStyle: "dashed", alignItems: "center", justifyContent: "center", gap: 2 },
+  thumbAddText: { fontSize: 10, color: COLORS.brand, fontWeight: "800" },
 });

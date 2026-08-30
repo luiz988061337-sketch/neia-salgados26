@@ -27,6 +27,7 @@ export type Product = {
   price: number;
   unit_size: number;
   image_url: string;
+  image_urls?: string[];
   flavors: string[];
   is_featured: boolean;
   theme?: string | null;
@@ -69,6 +70,13 @@ export type CustomerVip = {
   last_order_at?: string; birthday?: string | null;
 };
 export type ChatMessage = { id: string; order_id: string; from_role: "customer" | "motoboy"; text: string; created_at: string };
+export type AppNotification = { id: string; phone: string; title: string; body: string; kind: string; order_id?: string | null; read: boolean; created_at: string };
+export type Analytics = {
+  period: string; total_revenue: number; orders_count: number;
+  delivered_count: number; avg_ticket: number;
+  top_products: { name: string; qty: number; revenue: number }[];
+  series: { label: string; revenue: number; orders: number }[];
+};
 
 export type Order = {
   id: string;
@@ -161,6 +169,9 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ order_id: orderId, from_role, text }),
     }),
+  listNotifications: (phone: string) => req<{ unread: number; items: AppNotification[] }>(`/notifications?phone=${encodeURIComponent(phone)}`),
+  markAllRead: (phone: string) => req(`/notifications/read-all?phone=${encodeURIComponent(phone)}`, { method: "POST" }),
+  adminAnalytics: (period: "today" | "week" | "month") => req<Analytics>(`/admin/analytics?period=${period}`),
   async adminUploadImage(uri: string, name: string, type: string): Promise<{ path: string; url: string }> {
     const form = new FormData();
     if (Platform.OS === "web") {

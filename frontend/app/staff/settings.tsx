@@ -1,7 +1,7 @@
 import { useRouter } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft, CaretRight, Crown, ForkKnife, Gift, MapPin, Ranking, Sparkle, Storefront } from "phosphor-react-native";
+import { ArrowLeft, CaretRight, ChartBar, Crown, ForkKnife, Gift, MapPin, Ranking, Sparkle, Storefront } from "phosphor-react-native";
 
 import { COLORS, RADIUS, SPACING } from "@/src/theme";
 
@@ -26,6 +26,13 @@ export default function StaffSettings() {
           title="Loja & Taxa por km"
           subtitle="Localização da loja, taxa base e por km, aviso automático"
           onPress={() => router.push("/staff/store")}
+        />
+        <Row
+          testID="go-analytics"
+          icon={<ChartBar color={COLORS.brand} size={22} weight="fill" />}
+          title="Análise de Vendas"
+          subtitle="Faturamento diário, semanal e top produtos"
+          onPress={() => router.push("/staff/analytics")}
         />
         <Row
           testID="go-ranking"

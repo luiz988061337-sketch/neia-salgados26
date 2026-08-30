@@ -102,9 +102,10 @@ class Product(BaseModel):
     price: float
     unit_size: int
     image_url: str
+    image_urls: List[str] = []   # rotating gallery
     flavors: List[str] = []
     is_featured: bool = False
-    theme: Optional[str] = None  # links to a Theme.name; None = always visible
+    theme: Optional[str] = None
     active: bool = True
 
 
@@ -262,6 +263,7 @@ class ProductPatch(BaseModel):
     description: Optional[str] = None
     price: Optional[float] = None
     image_url: Optional[str] = None
+    image_urls: Optional[List[str]] = None
     flavors: Optional[List[str]] = None
     is_featured: Optional[bool] = None
     theme: Optional[str] = None
@@ -520,6 +522,92 @@ async def store_status():
         "open_time": s.get("open_time", "10:00"),
         "close_time": s.get("close_time", "20:00"),
         "bulk_tiers": s.get("bulk_tiers", []),
+    }
+
+
+# --- Notifications (in-app bell)
+async def create_notification(phone: str, title: str, body: str, kind: str = "status", order_id: Optional[str] = None):
+    doc = {
+        "id": str(uuid.uuid4()), "phone": phone, "title": title, "body": body,
+        "kind": kind, "order_id": order_id, "read": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.notifications.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.get("/notifications")
+async def list_notifications(phone: str):
+    docs = await db.notifications.find({"phone": phone}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    unread = sum(1 for d in docs if not d.get("read"))
+    return {"unread": unread, "items": docs}
+
+
+@api_router.post("/notifications/read-all")
+async def read_all_notifications(phone: str):
+    r = await db.notifications.update_many({"phone": phone, "read": False}, {"$set": {"read": True}})
+    return {"updated": r.modified_count}
+
+
+# --- Analytics
+@api_router.get("/admin/analytics")
+async def admin_analytics(period: str = "today"):
+    now = datetime.now(timezone.utc) - timedelta(hours=3)
+    if period == "today":
+        start = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+        days = 1
+    elif period == "week":
+        start = datetime(now.year, now.month, now.day, tzinfo=timezone.utc) - timedelta(days=6)
+        days = 7
+    else:  # month
+        start = datetime(now.year, now.month, now.day, tzinfo=timezone.utc) - timedelta(days=29)
+        days = 30
+    q = {"created_at": {"$gte": start.isoformat()}, "status": {"$ne": "cancelado"}}
+    orders = await db.orders.find(q, {"_id": 0}).to_list(2000)
+
+    total_revenue = round(sum(o.get("total", 0) for o in orders), 2)
+    total_delivered = sum(1 for o in orders if o.get("status") == "entregue")
+    orders_count = len(orders)
+    avg_ticket = round(total_revenue / orders_count, 2) if orders_count else 0
+
+    # Top products by quantity
+    tally: dict = {}
+    for o in orders:
+        for it in o.get("items", []):
+            key = it["product_name"]
+            e = tally.setdefault(key, {"name": key, "qty": 0, "revenue": 0.0})
+            e["qty"] += int(it.get("quantity", 0))
+            e["revenue"] += float(it.get("subtotal", 0))
+    top_products = sorted(tally.values(), key=lambda x: -x["revenue"])[:5]
+    for p in top_products:
+        p["revenue"] = round(p["revenue"], 2)
+
+    # Daily series
+    series = []
+    for i in range(days):
+        day = start + timedelta(days=i)
+        next_day = day + timedelta(days=1)
+        rev = 0.0
+        cnt = 0
+        for o in orders:
+            try:
+                created = datetime.fromisoformat(o["created_at"].replace("Z", "+00:00"))
+            except Exception:
+                continue
+            if day <= created < next_day:
+                rev += float(o.get("total", 0))
+                cnt += 1
+        series.append({"label": day.strftime("%d/%m"), "revenue": round(rev, 2), "orders": cnt})
+
+    return {
+        "period": period,
+        "total_revenue": total_revenue,
+        "orders_count": orders_count,
+        "delivered_count": total_delivered,
+        "avg_ticket": avg_ticket,
+        "top_products": top_products,
+        "series": series,
     }
 
 
@@ -949,9 +1037,21 @@ async def admin_update_status(order_id: str, body: StatusUpdate):
     # Auto-notificar via WhatsApp (Twilio) se configurado e habilitado
     settings = await get_settings()
     notify_result: dict = {"sent": False, "reason": "auto_disabled"}
-    if settings.get("auto_whatsapp") and twilio_ready():
-        order = await db.orders.find_one({"id": order_id}, {"_id": 0})
-        if order and order["customer"].get("whatsapp_opt_in", True):
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    # In-app notification for the customer
+    if order:
+        labels_short = {"recebido": "recebido", "fritando": "em preparo",
+                        "saiu_entrega": "saiu para entrega", "entregue": "entregue",
+                        "cancelado": "cancelado"}
+        label_s = labels_short.get(body.status, body.status)
+        await create_notification(
+            phone=order["customer"]["phone"],
+            title=f"Pedido #{order['short_code']} — {label_s}",
+            body=f"Seu pedido agora está {label_s}. Toque para acompanhar.",
+            kind="status", order_id=order_id,
+        )
+    if settings.get("auto_whatsapp") and twilio_ready() and order:
+        if order["customer"].get("whatsapp_opt_in", True):
             labels = {"recebido": "🥟 recebido", "fritando": "🔥 em preparo",
                       "saiu_entrega": "🛵 saiu para entrega", "entregue": "✅ entregue",
                       "cancelado": "❌ cancelado"}

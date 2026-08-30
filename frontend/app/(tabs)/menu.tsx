@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { COLORS, RADIUS, SPACING } from "@/src/theme";
 import { api, fileUrl, Product } from "@/src/api";
 import { brl } from "@/src/format";
+import RotatingImage from "@/src/components/RotatingImage";
 
 const CATS = [
   { id: "all", label: "Tudo" },
@@ -69,7 +70,7 @@ export default function Menu() {
             onPress={() => router.push({ pathname: "/product/[id]", params: { id: item.id } })}
             style={styles.card}
           >
-            <Image source={{ uri: fileUrl(item.image_url) }} style={styles.img} contentFit="cover" />
+            <RotatingImage urls={item.image_urls || []} fallback={item.image_url} style={styles.img} contentFit="cover" />
             <View style={{ flex: 1, gap: 4 }}>
               <View style={styles.tagRow}>
                 <View style={[styles.tag, item.category === "congelado" ? styles.tagBlue : styles.tagBrand]}>

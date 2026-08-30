@@ -4,11 +4,13 @@ import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from "react-n
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowRight, Fire, ShoppingBag, Storefront } from "phosphor-react-native";
+import { ArrowRight, Bell, Fire, ShoppingBag, Storefront } from "phosphor-react-native";
 
 import { COLORS, RADIUS, SPACING } from "@/src/theme";
-import { api, fileUrl, getCart, Product, StoreStatus, Theme } from "@/src/api";
+import { api, fileUrl, getCart, getCustomer, Product, StoreStatus, Theme } from "@/src/api";
 import { brl } from "@/src/format";
+import RotatingImage from "@/src/components/RotatingImage";
+import NotificationsSheet from "@/src/components/NotificationsSheet";
 
 export default function Home() {
   const insets = useSafeAreaInsets();
@@ -17,12 +19,21 @@ export default function Home() {
   const [cartCount, setCartCount] = useState(0);
   const [themes, setThemes] = useState<Theme[]>([]);
   const [store, setStore] = useState<StoreStatus | null>(null);
+  const [phone, setPhone] = useState<string>("");
+  const [unread, setUnread] = useState(0);
+  const [showNotif, setShowNotif] = useState(false);
 
   useEffect(() => {
     api.listProducts().then(setProducts).catch(() => {});
     api.listActiveThemes().then(setThemes).catch(() => {});
     api.storeStatus().then(setStore).catch(() => {});
     getCart().then((c) => setCartCount(c.reduce((s, i) => s + i.quantity, 0)));
+    getCustomer().then((c: any) => {
+      if (c?.phone) {
+        setPhone(c.phone);
+        api.listNotifications(c.phone).then((r) => setUnread(r.unread)).catch(() => {});
+      }
+    });
   }, []);
 
   const featured = products.filter((p) => p.is_featured);
@@ -36,12 +47,20 @@ export default function Home() {
           <Text style={styles.hello}>Olá 👋</Text>
           <Text style={styles.brand}>Néia Salgados</Text>
         </View>
-        <Pressable testID="header-cart-btn" onPress={() => router.push("/cart")} style={styles.cartBtn}>
-          <ShoppingBag color={COLORS.onSurface} size={22} weight="regular" />
-          {cartCount > 0 && (
-            <View style={styles.badge}><Text style={styles.badgeText}>{cartCount}</Text></View>
-          )}
-        </Pressable>
+        <View style={{ flexDirection: "row", gap: SPACING.sm }}>
+          <Pressable testID="header-bell-btn" onPress={() => phone && setShowNotif(true)} style={styles.cartBtn}>
+            <Bell color={COLORS.onSurface} size={22} weight="regular" />
+            {unread > 0 && (
+              <View style={styles.badge}><Text style={styles.badgeText}>{unread}</Text></View>
+            )}
+          </Pressable>
+          <Pressable testID="header-cart-btn" onPress={() => router.push("/cart")} style={styles.cartBtn}>
+            <ShoppingBag color={COLORS.onSurface} size={22} weight="regular" />
+            {cartCount > 0 && (
+              <View style={styles.badge}><Text style={styles.badgeText}>{cartCount}</Text></View>
+            )}
+          </Pressable>
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
@@ -112,7 +131,12 @@ export default function Home() {
               onPress={() => router.push({ pathname: "/product/[id]", params: { id: item.id } })}
               style={styles.featCard}
             >
-              <Image source={{ uri: fileUrl(item.image_url) }} style={styles.featImg} contentFit="cover" />
+              <RotatingImage
+                urls={item.image_urls || []}
+                fallback={item.image_url}
+                style={styles.featImg}
+                contentFit="cover"
+              />
               <View style={{ padding: SPACING.md, gap: 4 }}>
                 <Text style={styles.featName} numberOfLines={1}>{item.name}</Text>
                 <Text style={styles.featPrice}>{brl(item.price)}</Text>
@@ -131,7 +155,7 @@ export default function Home() {
               onPress={() => router.push({ pathname: "/product/[id]", params: { id: p.id } })}
               style={styles.row}
             >
-              <Image source={{ uri: fileUrl(p.image_url) }} style={styles.rowImg} contentFit="cover" />
+              <RotatingImage urls={p.image_urls || []} fallback={p.image_url} style={styles.rowImg} contentFit="cover" />
               <View style={{ flex: 1, gap: 4 }}>
                 <View style={styles.badge50}>
                   <Text style={styles.badge50Text}>50 em 50</Text>
@@ -153,6 +177,9 @@ export default function Home() {
           <Text style={styles.seeMoreText}>Ver cardápio completo</Text>
         </Pressable>
       </ScrollView>
+      {showNotif && phone && (
+        <NotificationsSheet phone={phone} onClose={() => { setShowNotif(false); if (phone) api.listNotifications(phone).then((r) => setUnread(r.unread)); }} />
+      )}
     </View>
   );
 }
@@ -165,6 +192,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    gap: SPACING.sm,
   },
   hello: { fontSize: 12, color: COLORS.muted, fontWeight: "500" },
   brand: { fontSize: 22, fontWeight: "800", color: COLORS.onSurface, letterSpacing: -0.5 },
