@@ -1,7 +1,7 @@
 import { useRouter } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft, CaretRight, ChartBar, Crown, ForkKnife, Gift, MapPin, Ranking, Sparkle, Storefront } from "phosphor-react-native";
+import { ArrowLeft, CaretRight, ChartBar, Crown, ForkKnife, Gift, MapPin, Ranking, Sparkle, Storefront, Ticket } from "phosphor-react-native";
 
 import { COLORS, RADIUS, SPACING } from "@/src/theme";
 
@@ -61,6 +61,13 @@ export default function StaffSettings() {
           title="Cardápio & Fotos"
           subtitle="Editar produtos, subir fotos reais dos salgados"
           onPress={() => router.push("/staff/products")}
+        />
+        <Row
+          testID="go-coupons"
+          icon={<Ticket color={COLORS.brand} size={22} weight="fill" />}
+          title="Cupons Promocionais"
+          subtitle="Criar cupons de desconto, 1ª compra, uso limitado"
+          onPress={() => router.push("/staff/coupons")}
         />
         <Row
           testID="go-neighborhoods"

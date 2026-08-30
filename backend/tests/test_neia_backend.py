@@ -28,7 +28,7 @@ class TestProducts:
         assert r.status_code == 200
         data = r.json()
         assert isinstance(data, list)
-        assert len(data) == 6, f"Expected 6 seeded products, got {len(data)}"
+        assert len(data) >= 6, f"Expected >=6 seeded products, got {len(data)}"
         # verify all 3 categories present
         cats = {p["category"] for p in data}
         assert {"combo", "frito", "congelado"}.issubset(cats)
@@ -234,3 +234,92 @@ class TestAdmin:
         order = s.post(f"{API}/orders", json=_make_payload([_make_item(combo, 50)])).json()
         r = s.post(f"{API}/admin/orders/{order['id']}/assign", json={"motoboy_id": "nope"})
         assert r.status_code == 404
+
+
+# ============ NEW: BEBIDA, COUPONS, LOYALTY ============
+class TestBebida:
+    def test_bebidas_have_unit_size_1(self, s):
+        r = s.get(f"{API}/products", params={"category": "bebida"})
+        assert r.status_code == 200
+        data = r.json()
+        assert len(data) >= 1
+        for p in data:
+            assert p["unit_size"] == 1, f"Bebida {p['name']} deve ter unit_size 1"
+
+    def test_create_order_bebida_qty_1_ok(self, s):
+        r = s.get(f"{API}/products", params={"category": "bebida"})
+        beb = r.json()[0]
+        payload = _make_payload([_make_item(beb, 1)])
+        r2 = s.post(f"{API}/orders", json=payload)
+        assert r2.status_code == 200, r2.text
+        assert r2.json()["items"][0]["quantity"] == 1
+
+
+class TestAdminCoupons:
+    def test_create_and_list_coupon(self, s):
+        code = "TESTE_XPTO"
+        # cleanup
+        s.delete(f"{API}/admin/coupons/{code}")
+        r = s.post(f"{API}/admin/coupons", json={
+            "code": code, "discount_percent": 20, "active": True,
+            "first_order_only": False, "description": "teste"
+        })
+        assert r.status_code == 200, r.text
+        assert r.json()["code"] == code
+        # duplicate
+        r2 = s.post(f"{API}/admin/coupons", json={"code": code, "discount_percent": 20})
+        assert r2.status_code == 400
+        # list contains it
+        lst = s.get(f"{API}/admin/coupons").json()
+        assert any(c["code"] == code for c in lst)
+        # toggle inactive
+        pr = s.patch(f"{API}/admin/coupons/{code}", json={"active": False})
+        assert pr.status_code == 200
+        # delete
+        dr = s.delete(f"{API}/admin/coupons/{code}")
+        assert dr.status_code == 200
+
+    def test_first_order_only_blocks_second_use(self, s, products):
+        combo = next(p for p in products if p["category"] == "combo")
+        code = "FIRST_ONLY_TEST"
+        s.delete(f"{API}/admin/coupons/{code}")
+        s.post(f"{API}/admin/coupons", json={
+            "code": code, "discount_percent": 10, "active": True, "first_order_only": True
+        })
+        # unique phone
+        import uuid as _u
+        phone = f"1198{str(_u.uuid4().int)[:7]}"
+        payload = _make_payload([_make_item(combo, 50)], coupon=code)
+        payload["customer"]["phone"] = phone
+        r1 = s.post(f"{API}/orders", json=payload)
+        assert r1.status_code == 200, r1.text
+        # second time with same phone should fail
+        r2 = s.post(f"{API}/orders", json=payload)
+        assert r2.status_code == 400
+        s.delete(f"{API}/admin/coupons/{code}")
+
+
+class TestLoyaltyPoints:
+    def test_redeem_requires_multiples_of_100(self, s):
+        r = s.post(f"{API}/customers/11999998888/redeem-points", json={"points": 50})
+        assert r.status_code == 400
+
+    def test_points_awarded_on_delivery_and_redeem(self, s, products):
+        combo = next(p for p in products if p["category"] == "combo")
+        import uuid as _u
+        phone = f"1198{str(_u.uuid4().int)[:7]}"
+        payload = _make_payload([_make_item(combo, 100)])
+        payload["customer"]["phone"] = phone
+        r = s.post(f"{API}/orders", json=payload)
+        assert r.status_code == 200
+        order = r.json()
+        total = int(order["total"])
+        # deliver
+        s.patch(f"{API}/admin/orders/{order['id']}/status", json={"status": "entregue"})
+        me = s.get(f"{API}/customers/me", params={"phone": phone}).json()
+        assert me.get("points", 0) >= total, f"esperado >= {total}, obtido {me.get('points')}"
+        # redeem 100 pts if available
+        if me["points"] >= 100:
+            rr = s.post(f"{API}/customers/{phone}/redeem-points", json={"points": 100})
+            assert rr.status_code == 200, rr.text
+            assert rr.json()["discount_percent"] == 5

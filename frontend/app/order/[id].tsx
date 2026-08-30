@@ -1,8 +1,8 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Clipboard, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft, ChatCircle, ChatCircleText, CheckCircle, Fire, House, Motorcycle, Phone, Receipt } from "phosphor-react-native";
+import { ArrowLeft, ChatCircle, ChatCircleText, CheckCircle, Copy, Fire, House, Motorcycle, Phone, Receipt, Share as ShareIcon, Star } from "phosphor-react-native";
 
 import { COLORS, RADIUS, SPACING } from "@/src/theme";
 import { api, Order } from "@/src/api";
@@ -24,11 +24,18 @@ export default function OrderTracking() {
   const router = useRouter();
   const [order, setOrder] = useState<Order | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
+  const [rating, setRating] = useState(0);
+  const [ratingSaved, setRatingSaved] = useState(false);
   const pollRef = useRef<any>(null);
 
   const fetchOrder = async () => {
     if (!id) return;
-    try { setOrder(await api.getOrder(id)); } catch {}
+    try {
+      const o = await api.getOrder(id);
+      setOrder(o);
+      const st = (o as any).rating_stars;
+      if (st && !rating) { setRating(st); setRatingSaved(true); }
+    } catch {}
   };
 
   useEffect(() => {
@@ -36,6 +43,34 @@ export default function OrderTracking() {
     pollRef.current = setInterval(fetchOrder, 5000);
     return () => clearInterval(pollRef.current);
   }, [id]);
+
+  const submitRating = async (stars: number) => {
+    if (!order || ratingSaved) return;
+    setRating(stars);
+    try {
+      await api.rateOrder(order.id, stars, "");
+      setRatingSaved(true);
+      Alert.alert("Obrigado!", "Sua avaliação foi registrada 💛");
+    } catch (e: any) {
+      Alert.alert("Erro", e.message || "Tente novamente");
+    }
+  };
+
+  const trackingUrl = order ? `${process.env.EXPO_PUBLIC_BACKEND_URL}/order/${order.id}` : "";
+
+  const shareOrder = async () => {
+    if (!order) return;
+    const msg = orderStatusMessage(order, process.env.EXPO_PUBLIC_BACKEND_URL || "");
+    try {
+      await Share.share({ message: msg, url: trackingUrl });
+    } catch {}
+  };
+
+  const copyLink = () => {
+    if (!trackingUrl) return;
+    try { (Clipboard as any).setString(trackingUrl); } catch {}
+    Alert.alert("Copiado", "Link do pedido copiado!");
+  };
 
   if (!order) {
     return <View style={{ flex: 1, backgroundColor: COLORS.surface, alignItems: "center", justifyContent: "center" }}>
@@ -66,14 +101,22 @@ export default function OrderTracking() {
           </View>
         )}
 
-        <Pressable
-          testID="share-order-whatsapp"
-          onPress={() => openWhatsApp(order.customer.phone, orderStatusMessage(order, process.env.EXPO_PUBLIC_BACKEND_URL || ""))}
-          style={styles.waShare}
-        >
-          <ChatCircleText color="#25D366" size={18} weight="fill" />
-          <Text style={styles.waShareText}>Compartilhar pedido no WhatsApp</Text>
-        </Pressable>
+        <View style={styles.shareRow}>
+          <Pressable
+            testID="share-order-whatsapp"
+            onPress={() => openWhatsApp(order.customer.phone, orderStatusMessage(order, process.env.EXPO_PUBLIC_BACKEND_URL || ""))}
+            style={[styles.waShare, { flex: 1 }]}
+          >
+            <ChatCircleText color="#25D366" size={18} weight="fill" />
+            <Text style={styles.waShareText}>WhatsApp</Text>
+          </Pressable>
+          <Pressable testID="share-order-native" onPress={shareOrder} style={styles.shareBtnSm}>
+            <ShareIcon color={COLORS.brand} size={18} weight="bold" />
+          </Pressable>
+          <Pressable testID="copy-link" onPress={copyLink} style={styles.shareBtnSm}>
+            <Copy color={COLORS.brand} size={18} weight="bold" />
+          </Pressable>
+        </View>
 
         {order.scheduled_for && (
           <View style={styles.scheduleBadge}>
@@ -105,6 +148,33 @@ export default function OrderTracking() {
             })}
           </View>
         </View>
+
+        {/* Rating */}
+        {(order.status === "entregue" || (order as any).rating_stars) && (
+          <View style={styles.ratingBlock}>
+            <Text style={styles.blockTitle}>{ratingSaved ? "Sua avaliação" : "Avalie seu pedido"}</Text>
+            <Text style={styles.ratingSub}>
+              {ratingSaved ? "Obrigado pela sua nota 💛" : "Toque nas estrelas para nos ajudar a melhorar."}
+            </Text>
+            <View style={styles.starsRow}>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <Pressable
+                  key={n}
+                  testID={`star-${n}`}
+                  disabled={ratingSaved}
+                  onPress={() => submitRating(n)}
+                  style={styles.starBtn}
+                >
+                  <Star
+                    color={n <= rating ? COLORS.warning : COLORS.borderStrong}
+                    size={34}
+                    weight={n <= rating ? "fill" : "regular"}
+                  />
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        )}
 
         {/* Map */}
         {showMap && (
@@ -175,10 +245,19 @@ const styles = StyleSheet.create({
   successText: { flex: 1, color: COLORS.success, fontWeight: "700", fontSize: 13 },
   waShare: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-    marginHorizontal: SPACING.lg, paddingVertical: 12, borderRadius: RADIUS.pill,
+    paddingVertical: 12, borderRadius: RADIUS.pill,
     backgroundColor: "#E9F9EF", borderWidth: 1, borderColor: "#25D366",
   },
   waShareText: { color: "#128C7E", fontWeight: "800", fontSize: 13 },
+  shareRow: { flexDirection: "row", alignItems: "center", gap: SPACING.sm, marginHorizontal: SPACING.lg },
+  shareBtnSm: {
+    width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.brandTertiary,
+    alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: COLORS.brand,
+  },
+  ratingBlock: { padding: SPACING.lg, marginTop: SPACING.sm, backgroundColor: COLORS.brandTertiary, marginHorizontal: SPACING.lg, borderRadius: RADIUS.md, gap: SPACING.sm },
+  ratingSub: { fontSize: 12, color: COLORS.onBrandTertiary, marginTop: 2 },
+  starsRow: { flexDirection: "row", justifyContent: "center", gap: SPACING.sm, marginTop: SPACING.sm },
+  starBtn: { padding: 4 },
   scheduleBadge: { marginHorizontal: SPACING.lg, marginTop: SPACING.md, padding: SPACING.md, borderRadius: RADIUS.md, backgroundColor: "#FFE9D3" },
   scheduleText: { color: COLORS.warning, fontWeight: "800", fontSize: 13, textAlign: "center" },
   blockTitle: { fontSize: 14, fontWeight: "800", color: COLORS.onSurface },

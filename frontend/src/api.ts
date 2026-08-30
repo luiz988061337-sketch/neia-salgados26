@@ -23,7 +23,8 @@ export type Product = {
   id: string;
   name: string;
   description: string;
-  category: "combo" | "frito" | "congelado";
+  category: "combo" | "frito" | "congelado" | "bebida";
+  subcategory?: string | null;
   price: number;
   unit_size: number;
   image_url: string;
@@ -37,7 +38,7 @@ export type Product = {
 export type CartItem = {
   product_id: string;
   product_name: string;
-  category: "combo" | "frito" | "congelado";
+  category: "combo" | "frito" | "congelado" | "bebida";
   quantity: number;
   unit_price: number;
   subtotal: number;
@@ -142,6 +143,10 @@ export const api = {
   adminProducts: () => req<Product[]>("/admin/products"),
   adminUpdateProduct: (id: string, body: Partial<Product>) =>
     req(`/admin/products/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  adminCreateProduct: (body: Partial<Product>) =>
+    req<Product>(`/admin/products`, { method: "POST", body: JSON.stringify(body) }),
+  adminDeleteProduct: (id: string) =>
+    req(`/admin/products/${id}`, { method: "DELETE" }),
   adminNeighborhoods: () => req<Neighborhood[]>("/admin/neighborhoods"),
   adminCreateNeighborhood: (body: { name: string; delivery_fee: number; active?: boolean }) =>
     req<Neighborhood>("/admin/neighborhoods", { method: "POST", body: JSON.stringify(body) }),
@@ -175,6 +180,18 @@ export const api = {
   getMe: (phone: string) => req<any>(`/customers/me?phone=${encodeURIComponent(phone)}`),
   rateOrder: (id: string, stars: number, comment: string) =>
     req(`/orders/${id}/rating`, { method: "POST", body: JSON.stringify({ stars, comment }) }),
+  redeemPoints: (phone: string, points: number) =>
+    req<{ code: string; discount_percent: number; remaining_points: number }>(
+      `/customers/${encodeURIComponent(phone)}/redeem-points`,
+      { method: "POST", body: JSON.stringify({ points }) }
+    ),
+  adminCoupons: () => req<any[]>("/admin/coupons"),
+  adminCreateCoupon: (body: any) =>
+    req<any>("/admin/coupons", { method: "POST", body: JSON.stringify(body) }),
+  adminUpdateCoupon: (code: string, body: any) =>
+    req(`/admin/coupons/${code}`, { method: "PATCH", body: JSON.stringify(body) }),
+  adminDeleteCoupon: (code: string) =>
+    req(`/admin/coupons/${code}`, { method: "DELETE" }),
   async adminUploadImage(uri: string, name: string, type: string): Promise<{ path: string; url: string }> {
     const form = new FormData();
     if (Platform.OS === "web") {

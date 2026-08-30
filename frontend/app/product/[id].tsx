@@ -36,9 +36,10 @@ export default function ProductDetail() {
 
   const step = product?.unit_size ?? 1;
   const totalFlavors = useMemo(() => Object.values(flavors).reduce((s, n) => s + n, 0), [flavors]);
-  const hasFlavors = (product?.flavors?.length ?? 0) > 0 && product?.category !== "congelado";
+  const hasFlavors = (product?.flavors?.length ?? 0) > 0 && product?.category !== "congelado" && product?.category !== "bebida";
   const flavorsOk = !hasFlavors || totalFlavors === qty;
   const canAdd = qty >= step && qty % step === 0 && flavorsOk;
+  const isBulk = product?.category === "combo" || product?.category === "frito";
 
   const subtotal = product ? (product.category === "combo" ? (qty / product.unit_size) * product.price : qty * product.price) : 0;
 
@@ -85,9 +86,9 @@ export default function ProductDetail() {
           <Pressable testID="back-btn" onPress={() => router.back()} style={[styles.backBtn, { top: insets.top + 8 }]}>
             <ArrowLeft color={COLORS.onSurface} size={20} weight="bold" />
           </Pressable>
-          <View style={[styles.tag, product.category === "congelado" ? styles.tagBlue : styles.tagBrand]}>
-            <Text style={[styles.tagText, product.category === "congelado" ? styles.tagBlueText : styles.tagBrandText]}>
-              {product.category === "congelado" ? "A partir de 1un" : "Fritura 50 em 50"}
+          <View style={[styles.tag, isBulk ? styles.tagBrand : styles.tagBlue]}>
+            <Text style={[styles.tagText, isBulk ? styles.tagBrandText : styles.tagBlueText]}>
+              {isBulk ? "Fritura 50 em 50" : "A partir de 1un"}
             </Text>
           </View>
         </View>
@@ -99,7 +100,7 @@ export default function ProductDetail() {
         </View>
 
         <View style={styles.qtyBlock}>
-          <Text style={styles.blockTitle}>Quantidade{product.category !== "congelado" && " (múltiplos de 50)"}</Text>
+          <Text style={styles.blockTitle}>Quantidade{isBulk && " (múltiplos de 50)"}</Text>
           <View style={styles.stepper}>
             <Pressable
               testID="qty-minus"

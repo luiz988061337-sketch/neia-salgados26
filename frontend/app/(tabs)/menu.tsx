@@ -14,6 +14,12 @@ const CATS = [
   { id: "combo", label: "Combos" },
   { id: "frito", label: "Fritos" },
   { id: "congelado", label: "Congelados" },
+  { id: "bebida", label: "Bebidas" },
+  { id: "sub:mini-fritos", label: "Mini Fritos" },
+  { id: "sub:mini-assados", label: "Mini Assados" },
+  { id: "sub:mini-pastelzinho", label: "Mini Pastelzinho" },
+  { id: "sub:mini-pizza", label: "Mini Pizza" },
+  { id: "sub:mini-empada", label: "Mini Empada" },
 ];
 
 export default function Menu() {
@@ -28,7 +34,11 @@ export default function Menu() {
     api.listProducts().then((r) => { setProducts(r); setLoading(false); }).catch(() => setLoading(false));
   }, []);
 
-  const filtered = cat === "all" ? products : products.filter((p) => p.category === cat);
+  const filtered = cat === "all"
+    ? products
+    : cat.startsWith("sub:")
+      ? products.filter((p) => p.subcategory === cat.slice(4))
+      : products.filter((p) => p.category === cat);
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>

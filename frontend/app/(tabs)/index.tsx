@@ -127,7 +127,7 @@ export default function Home() {
         >
           <View style={{ flex: 1 }}>
             <Text style={styles.buildTitle}>🥟 Monte seu Combo</Text>
-            <Text style={styles.buildSub}>Escolha os sabores fritos que quiser em múltiplos de 50</Text>
+            <Text style={styles.buildSub}>Escolha os sabores que quiser em múltiplos de 50</Text>
           </View>
           <ArrowRight color={COLORS.surface} size={20} weight="bold" />
         </Pressable>

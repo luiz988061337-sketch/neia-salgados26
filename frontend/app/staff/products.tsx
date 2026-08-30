@@ -24,6 +24,8 @@ export default function StaffProducts() {
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [themeName, setThemeName] = useState<string | null>(null);
   const [isFeatured, setIsFeatured] = useState(false);
+  const [category, setCategory] = useState<string>("combo");
+  const [unitSize, setUnitSize] = useState<string>("50");
 
   const load = async () => {
     setProducts(await api.adminProducts());
@@ -39,6 +41,8 @@ export default function StaffProducts() {
     setImageUrls(p.image_urls || []);
     setThemeName(p.theme || null);
     setIsFeatured(!!p.is_featured);
+    setCategory(p.category);
+    setUnitSize(String(p.unit_size || (p.category === "combo" || p.category === "frito" ? 50 : 1)));
   };
 
   const pick = async (fromCamera: boolean, target: "main" | "gallery" = "main") => {
@@ -70,6 +74,7 @@ export default function StaffProducts() {
     if (!editing) return;
     setSaving(true);
     try {
+      const us = Math.max(1, Number(unitSize) || 1);
       await api.adminUpdateProduct(editing.id, {
         name, description,
         price: Number(priceStr.replace(",", ".")),
@@ -77,6 +82,8 @@ export default function StaffProducts() {
         image_urls: imageUrls,
         theme: themeName || null,
         is_featured: isFeatured,
+        category,
+        unit_size: (category === "combo" || category === "frito") ? Math.max(50, us) : us,
       } as any);
       setEditing(null);
       await load();
@@ -92,7 +99,28 @@ export default function StaffProducts() {
           <ArrowLeft color={COLORS.onSurface} size={20} weight="bold" />
         </Pressable>
         <Text style={styles.title}>Cardápio & Fotos</Text>
-        <View style={{ width: 40 }} />
+        <Pressable
+          testID="new-product-btn"
+          onPress={async () => {
+            const cats = ["combo", "frito", "congelado", "bebida"];
+            const idx = cats.indexOf("bebida");
+            try {
+              const p = await api.adminCreateProduct({
+                name: "Novo produto",
+                description: "Descreva aqui...",
+                category: cats[idx] as any,
+                price: 5,
+                unit_size: 1,
+                image_url: "",
+              } as any);
+              await load();
+              openEdit(p);
+            } catch (e: any) { Alert.alert("Erro", e.message); }
+          }}
+          style={[styles.iconBtn, { backgroundColor: COLORS.brand }]}
+        >
+          <Plus color={COLORS.surface} size={18} weight="bold" />
+        </Pressable>
       </View>
 
       <FlatList
@@ -162,6 +190,29 @@ export default function StaffProducts() {
               <Field label="Nome"><TextInput testID="p-name" value={name} onChangeText={setName} style={styles.input} /></Field>
               <Field label="Descrição"><TextInput testID="p-desc" value={description} onChangeText={setDescription} multiline style={[styles.input, { minHeight: 80 }]} /></Field>
               <Field label="Preço (R$)"><TextInput testID="p-price" value={priceStr} onChangeText={setPriceStr} keyboardType="numeric" style={styles.input} /></Field>
+
+              <Field label="Categoria">
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: SPACING.sm, paddingVertical: 4 }}>
+                  {[
+                    { id: "combo", label: "Combo" },
+                    { id: "frito", label: "Frito" },
+                    { id: "congelado", label: "Congelado" },
+                    { id: "bebida", label: "Bebida" },
+                  ].map((c) => (
+                    <Pressable key={c.id} testID={`cat-${c.id}`} onPress={() => {
+                      setCategory(c.id);
+                      if (c.id === "combo" || c.id === "frito") setUnitSize("50");
+                      else setUnitSize("1");
+                    }} style={[styles.chip, category === c.id && styles.chipActive]}>
+                      <Text style={[styles.chipText, category === c.id && styles.chipTextActive]}>{c.label}</Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </Field>
+
+              <Field label={`Unidade mínima (${(category === "combo" || category === "frito") ? "múltiplo de 50" : "a partir de 1"})`}>
+                <TextInput testID="p-unit" value={unitSize} onChangeText={setUnitSize} keyboardType="numeric" style={styles.input} />
+              </Field>
 
               <Field label="Tema (opcional)">
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: SPACING.sm, paddingVertical: 4 }}>

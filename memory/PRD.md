@@ -1,6 +1,34 @@
 # Néia Salgados — PRD
 
-## Última feature: Monte seu Combo + Referral + Rating
+## Última entrega — Fidelidade, Cupons Avançados, Compartilhamento, Bebidas & Avaliação
+
+### 1. Programa de Fidelidade (pontos)
+- Cliente ganha **1 ponto por R$1 gasto** ao pedido ser marcado como *entregue* (automático).
+- Cartão "Programa Fidelidade" no Perfil mostra saldo, barra de progresso e botões de resgate.
+- Resgates: 100 pts → 5% off, 200 pts → 10% off, 500 pts → 25% off (teto). Cupom pessoal gerado com uso único.
+- Endpoint: `POST /api/customers/{phone}/redeem-points`.
+- Notificação in-app "🏆 +N pontos!" ao entregar.
+
+### 2. Cupons Promocionais Avançados
+- Novo painel Admin **Cupons Promocionais** (`/staff/coupons`) com CRUD completo.
+- Suporte a: `discount_percent`, `active`, `expires_at`, `max_uses` + `uses_count`, `first_order_only`, `description`.
+- Backend valida na criação de pedido: expirado / esgotado / não é 1ª compra / cupom pessoal (`belongs_to`).
+- Cupom **BEMVINDO** (15% off) é aplicado automaticamente na 1ª compra se cliente não informar código.
+- Endpoints admin: `GET/POST/PATCH/DELETE /api/admin/coupons[/{code}]`.
+
+### 3. Compartilhamento de Pedido (Tracking)
+- Bloco de share reformulado com 3 botões: WhatsApp (pré-preenchido) + Share nativo + Copiar link `/order/{id}`.
+
+### 4. Avaliação com estrelas (visível no Tracking)
+- Bloco "Avalie seu pedido" com 5 estrelas quando status = entregue (ou já avaliado).
+- Persistido em `POST /api/orders/{id}/rating`.
+
+### 5. Bebidas a partir de 1 unidade
+- Categoria `bebida` com `unit_size: 1` no seed (Coca 2L, Guaraná 2L, Coca lata, Suco 1L, Água 500ml).
+- UI de produto: mostra "A partir de 1un" e stepper de 1 em 1 para bebidas.
+- Frase "Monte seu combo frito" → "Monte seu Combo" no home e build-combo.
+
+## Feature anterior: Monte seu Combo + Referral + Rating
 
 ### 1. Monte seu Combo
 - Nova rota `/build-combo` acessível pelo card destacado na Home

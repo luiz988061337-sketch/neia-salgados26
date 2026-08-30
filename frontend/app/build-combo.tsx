@@ -94,7 +94,7 @@ export default function BuildCombo() {
       <ScrollView contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 200, gap: SPACING.md }}>
         <View style={styles.hint}>
           <Sparkle color={COLORS.brand} size={20} weight="fill" />
-          <Text style={styles.hintText}>Escolha os sabores fritos que você quiser, sempre em múltiplos de 50 unidades.</Text>
+          <Text style={styles.hintText}>Escolha os sabores que você quiser, sempre em múltiplos de 50 unidades.</Text>
         </View>
 
         <View style={styles.qtyBlock}>

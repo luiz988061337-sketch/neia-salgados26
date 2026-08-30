@@ -89,7 +89,7 @@ api_router = APIRouter(prefix="/api")
 
 
 # ============ MODELS ============
-ProductCategory = Literal["combo", "frito", "congelado"]
+ProductCategory = Literal["combo", "frito", "congelado", "bebida"]
 OrderStatus = Literal["recebido", "fritando", "saiu_entrega", "entregue", "cancelado"]
 PaymentMethod = Literal["pix", "dinheiro", "cartao"]
 
@@ -99,10 +99,11 @@ class Product(BaseModel):
     name: str
     description: str
     category: ProductCategory
+    subcategory: Optional[str] = None
     price: float
     unit_size: int
     image_url: str
-    image_urls: List[str] = []   # rotating gallery
+    image_urls: List[str] = []
     flavors: List[str] = []
     is_featured: bool = False
     theme: Optional[str] = None
@@ -275,6 +276,43 @@ class ProductPatch(BaseModel):
     is_featured: Optional[bool] = None
     theme: Optional[str] = None
     active: Optional[bool] = None
+    category: Optional[str] = None
+    subcategory: Optional[str] = None
+    unit_size: Optional[int] = None
+
+
+class ProductCreate(BaseModel):
+    name: str
+    description: str = ""
+    category: str
+    subcategory: Optional[str] = None
+    price: float
+    unit_size: int = 1
+    image_url: str = ""
+    flavors: List[str] = []
+
+
+class CouponIn(BaseModel):
+    code: str
+    discount_percent: int
+    active: bool = True
+    expires_at: Optional[str] = None       # ISO date string
+    max_uses: Optional[int] = None         # None = ilimitado
+    first_order_only: Optional[bool] = False
+    description: Optional[str] = ""
+
+
+class CouponPatch(BaseModel):
+    discount_percent: Optional[int] = None
+    active: Optional[bool] = None
+    expires_at: Optional[str] = None
+    max_uses: Optional[int] = None
+    first_order_only: Optional[bool] = None
+    description: Optional[str] = None
+
+
+class RedeemPointsIn(BaseModel):
+    points: int  # múltiplo de 100
 
 
 # ============ STORAGE HELPERS ============
@@ -452,6 +490,48 @@ async def seed_data():
         ]
         await db.products.insert_many(seed_products)
 
+    if await db.products.count_documents({"subcategory": {"$exists": True, "$ne": None}}) == 0:
+        mini_seeds = [
+            ("Mini Fritos", "Sortido especial com coxinha, kibe, risole e bolinha de queijo. Todos mini!", "mini-fritos", 1.70),
+            ("Mini Assados", "Enroladinho de salsicha, pão de queijo, esfihinha. Assados na hora.", "mini-assados", 1.90),
+            ("Mini Pastelzinho", "Pastelzinho crocante recheado com carne, queijo ou palmito.", "mini-pastelzinho", 1.80),
+            ("Mini Pizza", "Mini pizzas de mussarela, calabresa e portuguesa.", "mini-pizza", 2.20),
+            ("Mini Empada", "Empadinha de frango com catupiry, queijo e camarão.", "mini-empada", 2.40),
+        ]
+        imgs = [
+            "https://images.unsplash.com/photo-1641848462741-982725a92e49?w=600&q=80",
+            "https://images.unsplash.com/photo-1598142982901-df6cec10ae35?w=600&q=80",
+            "https://images.unsplash.com/photo-1623653387945-2fd25214f8fc?w=600&q=80",
+        ]
+        docs = []
+        for idx, (name, desc, sub, price) in enumerate(mini_seeds):
+            docs.append({
+                "id": str(uuid.uuid4()), "name": name, "description": desc,
+                "category": "frito", "subcategory": sub, "price": price, "unit_size": 50,
+                "image_url": imgs[idx % len(imgs)], "image_urls": [],
+                "flavors": [], "is_featured": False, "theme": None, "active": True,
+            })
+        await db.products.insert_many(docs)
+
+    if await db.products.count_documents({"category": "bebida"}) == 0:
+        beb_img = "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=600&q=80"
+        bebidas = [
+            ("Coca-Cola 2L", "Refrigerante Coca-Cola garrafa 2 litros gelado.", 12.90),
+            ("Guaraná Antarctica 2L", "Guaraná Antarctica garrafa 2 litros gelado.", 11.90),
+            ("Coca-Cola Lata 350ml", "Coca-Cola lata gelada 350ml.", 5.50),
+            ("Suco de Laranja 1L", "Suco de laranja natural 1 litro.", 14.90),
+            ("Água Mineral 500ml", "Água mineral sem gás 500ml.", 3.50),
+        ]
+        docs = []
+        for (name, desc, price) in bebidas:
+            docs.append({
+                "id": str(uuid.uuid4()), "name": name, "description": desc,
+                "category": "bebida", "subcategory": None, "price": price, "unit_size": 1,
+                "image_url": beb_img, "image_urls": [],
+                "flavors": [], "is_featured": False, "theme": None, "active": True,
+            })
+        await db.products.insert_many(docs)
+
     if await db.motoboys.count_documents({}) == 0:
         await db.motoboys.insert_many([
             {"id": str(uuid.uuid4()), "name": "Carlos Silva", "phone": "11999990001", "password": "1234",
@@ -462,8 +542,12 @@ async def seed_data():
 
     if await db.coupons.count_documents({}) == 0:
         await db.coupons.insert_many([
-            {"code": "NEIA10", "discount_percent": 10, "active": True},
-            {"code": "PRIMEIRO", "discount_percent": 15, "active": True},
+            {"code": "NEIA10", "discount_percent": 10, "active": True, "uses_count": 0, "max_uses": None,
+             "first_order_only": False, "description": "10% off geral"},
+            {"code": "PRIMEIRO", "discount_percent": 15, "active": True, "uses_count": 0, "max_uses": None,
+             "first_order_only": True, "description": "15% off na primeira compra"},
+            {"code": "BEMVINDO", "discount_percent": 15, "active": True, "uses_count": 0, "max_uses": None,
+             "first_order_only": True, "description": "Aplicado automático na 1ª compra"},
         ])
 
     if await db.neighborhoods.count_documents({}) == 0:
@@ -491,7 +575,7 @@ async def root():
 
 # --- Products
 @api_router.get("/products")
-async def list_products(category: Optional[str] = None):
+async def list_products(category: Optional[str] = None, subcategory: Optional[str] = None):
     active_themes = [t["name"] async for t in db.themes.find({"active": True}, {"_id": 0, "name": 1})]
     q = {
         "active": True,
@@ -499,6 +583,8 @@ async def list_products(category: Optional[str] = None):
     }
     if category:
         q["category"] = category
+    if subcategory:
+        q["subcategory"] = subcategory
     docs = await db.products.find(q, {"_id": 0}).to_list(200)
     return docs
 
@@ -622,13 +708,39 @@ async def admin_analytics(period: str = "today"):
 async def customer_me(phone: str):
     c = await db.customers.find_one({"phone": phone}, {"_id": 0})
     if not c:
-        return {"phone": phone, "referral_code": None, "referrals_used": 0, "credits": []}
+        return {"phone": phone, "referral_code": None, "referrals_used": 0, "credits": [], "points": 0}
     code = c.get("referral_code")
     referrals_used = await db.orders.count_documents({"referral_code_used": code}) if code else 0
     credits = await db.coupons.find(
         {"belongs_to": phone, "active": True}, {"_id": 0}
     ).to_list(50)
-    return {**c, "referrals_used": referrals_used, "credits": credits}
+    return {**c, "referrals_used": referrals_used, "credits": credits, "points": int(c.get("points", 0) or 0)}
+
+
+@api_router.post("/customers/{phone}/redeem-points")
+async def redeem_points(phone: str, body: RedeemPointsIn):
+    if body.points <= 0 or body.points % 100 != 0:
+        raise HTTPException(400, "Resgate em múltiplos de 100 pontos")
+    c = await db.customers.find_one({"phone": phone}, {"_id": 0})
+    if not c:
+        raise HTTPException(404, "Cliente não encontrado")
+    current = int(c.get("points", 0) or 0)
+    if current < body.points:
+        raise HTTPException(400, f"Você tem apenas {current} pontos")
+    # 100 pontos = R$ 5 = ~5% pra pedido de R$100. Usaremos desconto FIXO em Real via cupom "custom".
+    # Como a estrutura atual só tem discount_percent, vamos aproximar em %:
+    # 100 pts => 5%; 200 pts => 10%; 300 pts => 15% (teto 25%).
+    pct = min(25, (body.points // 100) * 5)
+    code = f"FID{phone[-4:]}-{int(datetime.now(timezone.utc).timestamp())}"
+    await db.coupons.insert_one({
+        "code": code, "discount_percent": pct, "active": True,
+        "belongs_to": phone, "reason": "loyalty",
+        "max_uses": 1, "uses_count": 0,
+        "description": f"Cupom fidelidade — {body.points} pontos → {pct}% off",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    await db.customers.update_one({"phone": phone}, {"$inc": {"points": -body.points}})
+    return {"code": code, "discount_percent": pct, "remaining_points": current - body.points}
 
 
 @api_router.post("/orders/{order_id}/rating")
@@ -848,7 +960,6 @@ async def create_order(payload: OrderCreate):
         else:
             if item.quantity <= 0:
                 raise HTTPException(400, f"Item '{item.product_name}' deve ter ao menos 1 unidade.")
-
     subtotal = sum(i.subtotal for i in payload.items)
 
     settings = await get_settings()
@@ -911,10 +1022,42 @@ async def create_order(payload: OrderCreate):
         c = await db.coupons.find_one({"code": payload.coupon_code.upper(), "active": True}, {"_id": 0})
         if not c:
             raise HTTPException(400, "Cupom inválido")
+        # Expiração
+        exp = c.get("expires_at")
+        if exp:
+            try:
+                exp_dt = datetime.fromisoformat(exp.replace("Z", "+00:00"))
+                if exp_dt < datetime.now(timezone.utc):
+                    raise HTTPException(400, "Cupom expirado")
+            except HTTPException:
+                raise
+            except Exception:
+                pass
+        # Uso máximo
+        if c.get("max_uses") is not None and int(c.get("uses_count", 0)) >= int(c["max_uses"]):
+            raise HTTPException(400, "Cupom esgotado")
+        # Somente primeira compra
+        if c.get("first_order_only"):
+            prev = await db.orders.count_documents({"customer.phone": payload.customer.phone})
+            if prev > 0:
+                raise HTTPException(400, "Cupom válido apenas na 1ª compra")
+        # Belongs_to (cupom pessoal)
+        if c.get("belongs_to") and c["belongs_to"] != payload.customer.phone:
+            raise HTTPException(400, "Cupom pessoal — não pertence a este número")
         code_disc = round(subtotal * (c["discount_percent"] / 100), 2)
         if code_disc > discount:
             discount = code_disc
             applied_coupon = payload.coupon_code.upper()
+    else:
+        # Auto-aplicar cupom de boas-vindas em 1ª compra
+        prev_orders = await db.orders.count_documents({"customer.phone": payload.customer.phone})
+        if prev_orders == 0 and discount == 0:
+            welcome = await db.coupons.find_one({"code": "BEMVINDO", "active": True}, {"_id": 0})
+            if welcome:
+                wdisc = round(subtotal * (int(welcome["discount_percent"]) / 100), 2)
+                if wdisc > 0:
+                    discount = wdisc
+                    applied_coupon = "BEMVINDO"
 
     # Referral logic — new customer's first order using someone's code
     referral_used = payload.referral_code_used.strip().upper() if payload.referral_code_used else None
@@ -958,6 +1101,10 @@ async def create_order(payload: OrderCreate):
         scheduled_for=payload.scheduled_for,
     )
     await db.orders.insert_one(order.model_dump())
+
+    # Incrementar uses_count do cupom se foi aplicado (por código real, não bulk/aniv/indic)
+    if applied_coupon and not applied_coupon.startswith(("LOTE", "ANIVERSARIO", "INDIC")):
+        await db.coupons.update_one({"code": applied_coupon}, {"$inc": {"uses_count": 1}})
 
     # Upsert customer profile + auto-generate referral code on first save
     existing = await db.customers.find_one({"phone": payload.customer.phone}, {"_id": 0})
@@ -1078,12 +1225,28 @@ async def start_delivery(motoboy_id: str, order_id: str):
 @api_router.post("/motoboy/{motoboy_id}/complete/{order_id}")
 async def complete_delivery(motoboy_id: str, order_id: str):
     now = datetime.now(timezone.utc).isoformat()
+    prev = await db.orders.find_one({"id": order_id, "motoboy_id": motoboy_id}, {"_id": 0})
     r = await db.orders.update_one(
         {"id": order_id, "motoboy_id": motoboy_id},
         {"$set": {"status": "entregue", "updated_at": now, "delivered_at": now}}
     )
     if r.matched_count == 0:
         raise HTTPException(404, "Pedido não encontrado")
+    # Award loyalty points
+    if prev and prev.get("status") != "entregue":
+        pts = int(float(prev.get("total", 0)))
+        if pts > 0:
+            await db.customers.update_one(
+                {"phone": prev["customer"]["phone"]},
+                {"$inc": {"points": pts}, "$set": {"updated_at": now}},
+                upsert=True,
+            )
+            await create_notification(
+                phone=prev["customer"]["phone"],
+                title=f"🏆 +{pts} pontos!",
+                body=f"Você ganhou {pts} pontos pelo pedido #{prev['short_code']}. Junte 100 e troque por cupom!",
+                kind="loyalty", order_id=order_id,
+            )
     return {"ok": True}
 
 
@@ -1110,9 +1273,27 @@ async def admin_update_status(order_id: str, body: StatusUpdate):
     updates = {"status": body.status, "updated_at": now}
     if body.status == "entregue":
         updates["delivered_at"] = now
+    # Estado anterior para saber se estamos entregando pela 1ª vez
+    prev = await db.orders.find_one({"id": order_id}, {"_id": 0})
     r = await db.orders.update_one({"id": order_id}, {"$set": updates})
     if r.matched_count == 0:
         raise HTTPException(404, "Pedido não encontrado")
+
+    # Conceder pontos de fidelidade ao entregar (1 ponto por R$1, apenas na 1ª vez)
+    if body.status == "entregue" and prev and prev.get("status") != "entregue":
+        pts = int(float(prev.get("total", 0)))
+        if pts > 0:
+            await db.customers.update_one(
+                {"phone": prev["customer"]["phone"]},
+                {"$inc": {"points": pts}, "$set": {"updated_at": now}},
+                upsert=True,
+            )
+            await create_notification(
+                phone=prev["customer"]["phone"],
+                title=f"🏆 +{pts} pontos!",
+                body=f"Você ganhou {pts} pontos de fidelidade pelo pedido #{prev['short_code']}. Junte 100 e troque por cupom!",
+                kind="loyalty", order_id=order_id,
+            )
 
     # Auto-notificar via WhatsApp (Twilio) se configurado e habilitado
     settings = await get_settings()
@@ -1186,6 +1367,71 @@ async def admin_update_product(product_id: str, body: ProductPatch):
     r = await db.products.update_one({"id": product_id}, {"$set": updates})
     if r.matched_count == 0:
         raise HTTPException(404, "Produto não encontrado")
+    return {"ok": True}
+
+
+@api_router.post("/admin/products")
+async def admin_create_product(body: ProductCreate):
+    doc = body.model_dump()
+    doc["id"] = str(uuid.uuid4())
+    doc["is_featured"] = False
+    doc["theme"] = None
+    doc["active"] = True
+    doc["image_urls"] = []
+    await db.products.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.delete("/admin/products/{product_id}")
+async def admin_delete_product(product_id: str):
+    r = await db.products.update_one({"id": product_id}, {"$set": {"active": False}})
+    if r.matched_count == 0:
+        raise HTTPException(404, "Produto não encontrado")
+    return {"ok": True}
+
+
+# Admin — Coupons
+@api_router.get("/admin/coupons")
+async def admin_list_coupons():
+    docs = await db.coupons.find({}, {"_id": 0}).sort("code", 1).to_list(200)
+    return docs
+
+
+@api_router.post("/admin/coupons")
+async def admin_create_coupon(body: CouponIn):
+    doc = body.model_dump()
+    doc["code"] = doc["code"].upper().strip()
+    if not doc["code"]:
+        raise HTTPException(400, "Código obrigatório")
+    if doc["discount_percent"] <= 0 or doc["discount_percent"] > 100:
+        raise HTTPException(400, "Percentual entre 1 e 100")
+    exists = await db.coupons.find_one({"code": doc["code"]})
+    if exists:
+        raise HTTPException(400, "Já existe cupom com esse código")
+    doc["uses_count"] = 0
+    doc["created_at"] = datetime.now(timezone.utc).isoformat()
+    await db.coupons.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.patch("/admin/coupons/{code}")
+async def admin_update_coupon(code: str, body: CouponPatch):
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    if not updates:
+        raise HTTPException(400, "Nada para atualizar")
+    r = await db.coupons.update_one({"code": code.upper()}, {"$set": updates})
+    if r.matched_count == 0:
+        raise HTTPException(404, "Cupom não encontrado")
+    return {"ok": True}
+
+
+@api_router.delete("/admin/coupons/{code}")
+async def admin_delete_coupon(code: str):
+    r = await db.coupons.delete_one({"code": code.upper()})
+    if r.deleted_count == 0:
+        raise HTTPException(404, "Cupom não encontrado")
     return {"ok": True}
 
 
