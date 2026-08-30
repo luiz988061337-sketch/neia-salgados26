@@ -2,6 +2,7 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Image } from "expo-image";
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from "react-native-reanimated";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowRight, Bell, Fire, ShoppingBag, Storefront } from "phosphor-react-native";
@@ -11,6 +12,8 @@ import { api, fileUrl, getCart, getCustomer, Product, StoreStatus, Theme } from 
 import { brl } from "@/src/format";
 import RotatingImage from "@/src/components/RotatingImage";
 import NotificationsSheet from "@/src/components/NotificationsSheet";
+
+const AnimatedImage = Animated.createAnimatedComponent(Image);
 
 export default function Home() {
   const insets = useSafeAreaInsets();
@@ -22,6 +25,47 @@ export default function Home() {
   const [phone, setPhone] = useState<string>("");
   const [unread, setUnread] = useState(0);
   const [showNotif, setShowNotif] = useState(false);
+
+  const scale = useSharedValue(1);
+  const rot = useSharedValue(0);
+  const ty = useSharedValue(0);
+
+  useEffect(() => {
+    // Bounce entry
+    ty.value = withSequence(
+      withTiming(-14, { duration: 350, easing: Easing.out(Easing.quad) }),
+      withTiming(0, { duration: 300, easing: Easing.bounce }),
+    );
+    scale.value = withSequence(
+      withTiming(1.08, { duration: 350 }),
+      withTiming(1, { duration: 300 }),
+    );
+    // Recurring subtle bounce every 6s
+    ty.value = withDelay(1200, withRepeat(
+      withSequence(
+        withTiming(-8, { duration: 260, easing: Easing.out(Easing.quad) }),
+        withTiming(0, { duration: 260, easing: Easing.bounce }),
+        withTiming(0, { duration: 5500 }),
+      ), -1, false
+    ));
+    // Gentle wobble
+    rot.value = withDelay(600, withRepeat(
+      withSequence(
+        withTiming(-2, { duration: 800 }),
+        withTiming(2, { duration: 1400 }),
+        withTiming(0, { duration: 800 }),
+        withTiming(0, { duration: 6000 }),
+      ), -1, false
+    ));
+  }, []);
+
+  const logoStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: ty.value },
+      { scale: scale.value },
+      { rotate: `${rot.value}deg` },
+    ],
+  }));
 
   useEffect(() => {
     api.listProducts().then(setProducts).catch(() => {});
@@ -41,10 +85,10 @@ export default function Home() {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
-      {/* Logo banner */}
-      <Image
+      {/* Logo banner (animado) */}
+      <AnimatedImage
         source={require("@/assets/images/logo-hd.png")}
-        style={styles.logoBanner}
+        style={[styles.logoBanner, logoStyle]}
         contentFit="cover"
       />
       {/* Header */}

@@ -66,19 +66,22 @@ def _phone_to_whatsapp(phone: str) -> str:
     return f"whatsapp:+{digits}"
 
 
-def send_whatsapp(phone: str, body: Optional[str] = None, template_sid: Optional[str] = None, variables: Optional[dict] = None) -> dict:
+def send_whatsapp(phone: str, body: Optional[str] = None, template_sid: Optional[str] = None, variables: Optional[dict] = None, media_url: Optional[str] = None) -> dict:
     client = twilio_client()
     if not client:
         return {"sent": False, "reason": "twilio_not_configured"}
     try:
         to = _phone_to_whatsapp(phone)
-        kwargs = {"from_": TWILIO_WHATSAPP_FROM, "to": to}
+        kwargs: dict = {"from_": TWILIO_WHATSAPP_FROM, "to": to}
         if template_sid:
             import json as _j
             kwargs["content_sid"] = template_sid
             kwargs["content_variables"] = _j.dumps(variables or {}, ensure_ascii=False)
         else:
             kwargs["body"] = body or ""
+            if media_url:
+                # Twilio aceita até 5 URLs de media
+                kwargs["media_url"] = [media_url]
         msg = client.messages.create(**kwargs)
         return {"sent": True, "sid": msg.sid, "status": msg.status}
     except Exception as e:
@@ -91,6 +94,15 @@ APP_PUBLIC_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "").rstrip("/")
 def _tracking_link(order_id: str) -> str:
     base = APP_PUBLIC_URL or ""
     return f"{base}/order/{order_id}" if base else f"/order/{order_id}"
+
+
+async def _brand_media_url() -> Optional[str]:
+    """Retorna URL pública absoluta da logo (para Twilio media). None se não configurada."""
+    s = await get_settings()
+    logo = (s.get("logo_url") or "").strip()
+    if not logo or not APP_PUBLIC_URL:
+        return None
+    return f"{APP_PUBLIC_URL}{logo}" if logo.startswith("/") else logo
 
 
 async def notify_customer_out_for_delivery(order: dict):
@@ -107,9 +119,11 @@ async def notify_customer_out_for_delivery(order: dict):
     moto = order.get("motoboy_name") or "seu entregador"
     msg = (
         f"🛵 Olá {name}! Seu pedido *#{order['short_code']}* saiu para entrega com {moto}.\n"
-        f"Acompanhe em tempo real: {link}"
+        f"Acompanhe em tempo real: {link}\n\n"
+        f"— *Néia Salgados* — O sabor que faz a diferença 💛"
     )
-    return send_whatsapp(phone, body=msg)
+    media = await _brand_media_url()
+    return send_whatsapp(phone, body=msg, media_url=media)
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -239,10 +253,11 @@ class SettingsIn(BaseModel):
     open_time: Optional[str] = None
     close_time: Optional[str] = None
     birthday_coupon_pct: Optional[int] = None
-    bulk_tiers: Optional[List[dict]] = None  # [{min_qty:int, discount_pct:int, label:str}]
+    bulk_tiers: Optional[List[dict]] = None
     loyalty_active: Optional[bool] = None
     loyalty_points_per_real: Optional[float] = None
-    loyalty_tiers: Optional[List[dict]] = None  # [{points:int, discount_pct:int}]
+    loyalty_tiers: Optional[List[dict]] = None
+    logo_url: Optional[str] = None  # Path relativo (/api/files/...) para assinatura no WhatsApp
 
 
 class ChatMessageIn(BaseModel):
@@ -1017,6 +1032,7 @@ async def get_public_settings():
         "loyalty_active": bool(s.get("loyalty_active", True)),
         "loyalty_points_per_real": float(s.get("loyalty_points_per_real", 1.0)),
         "loyalty_tiers": s.get("loyalty_tiers", []),
+        "logo_url": s.get("logo_url", ""),
     }
 
 
@@ -1578,9 +1594,11 @@ async def admin_update_status(order_id: str, body: StatusUpdate):
                 label = labels.get(body.status, body.status)
                 msg = (
                     f"Olá {order['customer']['name']}! Seu pedido *#{order['short_code']}* na Néia Salgados "
-                    f"está {label}."
+                    f"está {label}.\n\n"
+                    f"— *Néia Salgados* — O sabor que faz a diferença 💛"
                 )
-                r2 = send_whatsapp(order["customer"]["phone"], body=msg)
+                media = await _brand_media_url()
+                r2 = send_whatsapp(order["customer"]["phone"], body=msg, media_url=media)
             notify_result = r2
             await db.message_logs.insert_one({
                 "id": str(uuid.uuid4()), "kind": "status", "order_id": order_id,

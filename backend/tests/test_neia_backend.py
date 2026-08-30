@@ -198,6 +198,28 @@ class TestMotoboy:
         assert verify["status"] == "saiu_entrega"
 
 
+class TestBebidasMinimum1:
+    def test_bebida_qty_1_creates_ok(self, s):
+        beb = s.get(f"{API}/products", params={"category": "bebida"}).json()[0]
+        p = _make_payload([_make_item(beb, 1)])
+        r = s.post(f"{API}/orders", json=p)
+        assert r.status_code == 200, r.text
+
+    def test_bebida_qty_3_creates_ok(self, s):
+        beb = s.get(f"{API}/products", params={"category": "bebida"}).json()[0]
+        p = _make_payload([_make_item(beb, 3)])
+        r = s.post(f"{API}/orders", json=p)
+        assert r.status_code == 200, r.text
+        assert r.json()["items"][0]["quantity"] == 3
+
+    def test_bebida_qty_zero_rejected(self, s):
+        beb = s.get(f"{API}/products", params={"category": "bebida"}).json()[0]
+        item = _make_item(beb, 1); item["quantity"] = 0
+        p = _make_payload([item])
+        r = s.post(f"{API}/orders", json=p)
+        assert r.status_code == 400
+
+
 # ============ ADMIN ============
 class TestAdmin:
     def test_admin_login_success(self, s):
