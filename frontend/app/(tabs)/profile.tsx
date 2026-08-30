@@ -1,6 +1,7 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { Alert, Clipboard, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CaretRight, ChatCircleText, Copy, Gift, Lock, MapPin, Motorcycle, Phone, ShieldCheck, Storefront, Trophy, UsersThree } from "phosphor-react-native";
 
@@ -61,6 +62,11 @@ export default function Profile() {
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <View style={styles.header}><Text style={styles.title}>Perfil</Text></View>
       <ScrollView contentContainerStyle={{ padding: SPACING.lg, gap: SPACING.md, paddingBottom: 60 }}>
+        <Image
+          source={require("@/assets/images/logo-hd.png")}
+          style={styles.logoHero}
+          contentFit="cover"
+        />
         <View style={styles.brandCard}>
           <Storefront color={COLORS.brand} size={28} weight="fill" />
           <View style={{ flex: 1 }}>
@@ -177,6 +183,7 @@ const styles = StyleSheet.create({
   header: { padding: SPACING.lg, borderBottomWidth: 1, borderBottomColor: COLORS.border },
   title: { fontSize: 24, fontWeight: "800", color: COLORS.onSurface },
   brandCard: { flexDirection: "row", alignItems: "center", gap: SPACING.md, padding: SPACING.lg, backgroundColor: COLORS.brandTertiary, borderRadius: RADIUS.md },
+  logoHero: { width: "100%", height: 160, borderRadius: RADIUS.md, backgroundColor: "#F4B821" },
   brandName: { fontSize: 18, fontWeight: "800", color: COLORS.onBrandTertiary },
   brandSub: { fontSize: 12, color: COLORS.onBrandTertiary, marginTop: 2 },
   section: { fontSize: 12, fontWeight: "800", color: COLORS.muted, textTransform: "uppercase", marginTop: SPACING.md, letterSpacing: 0.5 },

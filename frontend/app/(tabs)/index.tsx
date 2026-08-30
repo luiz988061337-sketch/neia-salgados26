@@ -41,11 +41,16 @@ export default function Home() {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
+      {/* Logo banner */}
+      <Image
+        source={require("@/assets/images/logo-hd.png")}
+        style={styles.logoBanner}
+        contentFit="cover"
+      />
       {/* Header */}
       <View style={styles.header}>
-        <View>
+        <View style={{ flex: 1 }}>
           <Text style={styles.hello}>Olá 👋</Text>
-          <Text style={styles.brand}>Néia Salgados</Text>
           <Text style={styles.tagline}>O sabor que faz a diferença</Text>
         </View>
         <View style={{ flexDirection: "row", gap: SPACING.sm }}>
@@ -200,6 +205,7 @@ export default function Home() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.surface },
+  logoBanner: { width: "100%", height: 140, backgroundColor: "#F4B821" },
   header: {
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
