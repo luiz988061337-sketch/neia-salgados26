@@ -1,0 +1,39 @@
+{
+  "summary": "Testes backend e frontend do bug fix (9 categorias em cadastro de produto) e da feature de IMPRESSÃO. Backend: 50/50 testes pytest passaram (38 do arquivo existente test_neia_backend.py + 12 novos em test_print_and_categories.py cobrindo mini-* subcategorias, CRUD de print-templates, CRUD de printers e receipt rendering). Frontend: modal 'Novo produto' exibe TODOS os 9 chips esperados (cat-combo, cat-frito, cat-congelado, cat-bebida, cat-frito-mini-fritos, cat-frito-mini-assados, cat-frito-mini-pastelzinho, cat-frito-mini-pizza, cat-frito-mini-empada). Telas /staff/print-templates (2 modelos: 80mm e 58mm) e /staff/printers (1 default 'Impressora Balcão') renderizam corretamente. Botão 'Imprimir comanda' com testID admin-print-{orderId} presente em todos os 30 cards do painel admin. Bug fix validado e feature de impressão funcionando end-to-end.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "shadow* style props", "issue": "Console warning: '\"shadow*\" style props are deprecated. Use \"boxShadow\".' (RN Web 0.19+). Aparece em várias telas. Reference: qualquer StyleSheet com shadowColor/shadowOffset/shadowOpacity/shadowRadius"},
+      {"component": "pointerEvents prop", "issue": "Console warning: 'props.pointerEvents is deprecated. Use style.pointerEvents' — mover para style em componentes afetados"}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_neia_backend.py",
+    "/app/backend/tests/test_print_and_categories.py",
+    "/app/test_reports/pytest/pytest_print.xml"
+  ],
+  "action_items": [
+    "Backend/tests não têm nada a corrigir — todos passam.",
+    "OPCIONAL: substituir estilos 'shadow*' por 'boxShadow' e mover prop 'pointerEvents' para style em componentes para eliminar warnings RN Web 0.19+.",
+    "OPCIONAL (code review): /app/backend/server.py tem ~2000 linhas — considerar dividir em módulos (products, orders, admin, print, motoboy) para manutenibilidade."
+  ],
+  "critical_code_review_comments": [
+    "server.py excede 700 linhas (recomendação de refatoração em módulos por domínio).",
+    "Endpoint /admin/orders/{id}/receipt não valida existência de 'active' template — se nenhum template ativo existir retorna 400 (comportamento OK)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_print_and_categories.py (novo)"
+  ],
+  "success_rate": {"backend": "100% (50/50)", "frontend": "100% (todas telas e testIDs verificados)"},
+  "seed_data_creation": "Não criei seed adicional. Testes usam produtos/impressoras já seedados pelo backend startup. Dados criados em testes (TEST_*) foram removidos ao final de cada teste.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Todos os endpoints novos de impressão (/api/admin/print-templates, /api/admin/printers, /api/admin/orders/{id}/receipt) e o bug fix das 9 categorias no cadastro de produto foram validados e passam nos 50 testes automatizados. Use test_print_and_categories.py como regressão. IMPORTANTE: pedidos exigem 'scheduled_for' se a loja estiver fechada (America/Sao_Paulo aprox), então inclua timestamp futuro em payload.",
+  "rca_of_issue": "N/A — o bug foi corrigido com sucesso pelo main agent antes deste ciclo de teste. Verificado: products.tsx linhas 205-234 renderizam 9 chips com testIDs corretos; ao selecionar chip 'Mini Pizza' os states category='frito' e subcategory='mini-pizza' são setados corretamente; backend aceita e persiste o produto."
+}

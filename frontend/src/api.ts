@@ -152,6 +152,27 @@ export const api = {
     req<any>("/admin/motoboys", { method: "POST", body: JSON.stringify(body) }),
   customerOfMonth: () =>
     req<{ month: string; customer: TopCustomer | null; coupon: { code: string; discount_percent: number } | null }>("/customers/top-of-month"),
+  // Print templates
+  adminPrintTemplates: () => req<any[]>("/admin/print-templates"),
+  adminCreatePrintTemplate: (body: any) =>
+    req<any>("/admin/print-templates", { method: "POST", body: JSON.stringify(body) }),
+  adminUpdatePrintTemplate: (id: string, body: any) =>
+    req(`/admin/print-templates/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  adminDeletePrintTemplate: (id: string) =>
+    req(`/admin/print-templates/${id}`, { method: "DELETE" }),
+  // Printers
+  adminPrinters: () => req<any[]>("/admin/printers"),
+  adminCreatePrinter: (body: any) =>
+    req<any>("/admin/printers", { method: "POST", body: JSON.stringify(body) }),
+  adminUpdatePrinter: (id: string, body: any) =>
+    req(`/admin/printers/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  adminDeletePrinter: (id: string) =>
+    req(`/admin/printers/${id}`, { method: "DELETE" }),
+  // Receipt
+  adminOrderReceipt: (orderId: string, printerId?: string) =>
+    req<{ text: string; width_mm: number; printer: { id: string; name: string } | null; template: { id: string; name: string } }>(
+      `/admin/orders/${orderId}/receipt${printerId ? `?printer_id=${printerId}` : ""}`
+    ),
   adminUpdateMotoboy: (id: string, body: any) =>
     req(`/admin/motoboys/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   adminDeleteMotoboy: (id: string) =>

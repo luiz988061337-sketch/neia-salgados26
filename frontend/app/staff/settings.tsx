@@ -1,7 +1,7 @@
 import { useRouter } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft, CaretRight, ChartBar, Crown, ForkKnife, Gift, MapPin, Motorcycle, Ranking, Sparkle, Storefront, Ticket, Trophy } from "phosphor-react-native";
+import { ArrowLeft, CaretRight, ChartBar, Crown, ForkKnife, Gift, MapPin, Motorcycle, Printer, Ranking, Sparkle, Storefront, Ticket, Trophy } from "phosphor-react-native";
 
 import { COLORS, RADIUS, SPACING } from "@/src/theme";
 
@@ -82,6 +82,20 @@ export default function StaffSettings() {
           title="Cupons Promocionais"
           subtitle="Criar cupons de desconto, 1ª compra, uso limitado"
           onPress={() => router.push("/staff/coupons")}
+        />
+        <Row
+          testID="go-print-templates"
+          icon={<Printer color={COLORS.brand} size={22} weight="fill" />}
+          title="Modelos de Impressão"
+          subtitle="Editar cabeçalho, corpo e rodapé da comanda"
+          onPress={() => router.push("/staff/print-templates")}
+        />
+        <Row
+          testID="go-printers"
+          icon={<Printer color={COLORS.brand} size={22} weight="fill" />}
+          title="Impressoras"
+          subtitle="Cadastrar impressoras, escolher modelo e definir padrão"
+          onPress={() => router.push("/staff/printers")}
         />
         <Row
           testID="go-neighborhoods"

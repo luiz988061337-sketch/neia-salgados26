@@ -2,12 +2,13 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft, CaretDown, ChatCircleText, Gear, X } from "phosphor-react-native";
+import { ArrowLeft, CaretDown, ChatCircleText, Gear, Printer, X } from "phosphor-react-native";
 
 import { COLORS, RADIUS, SPACING } from "@/src/theme";
 import { api, Motoboy, Order, Settings } from "@/src/api";
 import { brl, statusLabel, timeAgo } from "@/src/format";
 import { openWhatsApp, orderStatusMessage } from "@/src/whatsapp";
+import { printOrderReceipt } from "@/src/print";
 
 const STATUS_FLOW: Order["status"][] = ["recebido", "fritando", "saiu_entrega", "entregue", "cancelado"];
 
@@ -20,11 +21,26 @@ export default function Admin() {
   const [filter, setFilter] = useState<string>("all");
   const [assignFor, setAssignFor] = useState<Order | null>(null);
   const [statusFor, setStatusFor] = useState<Order | null>(null);
+  const [printers, setPrinters] = useState<any[]>([]);
+  const [printFor, setPrintFor] = useState<Order | null>(null);
+  const [printing, setPrinting] = useState(false);
 
   const load = async () => {
     try { setOrders(await api.adminOrders()); } catch {}
     try { setMotoboys(await api.adminMotoboys()); } catch {}
     try { setSettings(await api.adminGetSettings()); } catch {}
+    try { setPrinters(await api.adminPrinters()); } catch {}
+  };
+
+  const handlePrint = async (order: Order, printerId?: string) => {
+    try {
+      setPrinting(true);
+      await printOrderReceipt(order.id, printerId);
+      setPrintFor(null);
+    } catch (e: any) {
+      // Alert-lite
+      console.warn(e.message);
+    } finally { setPrinting(false); }
   };
 
   useEffect(() => {
@@ -105,6 +121,17 @@ export default function Admin() {
               <ChatCircleText color="#25D366" size={16} weight="fill" />
               <Text style={styles.waText}>Avisar cliente pelo WhatsApp</Text>
             </Pressable>
+            <Pressable
+              testID={`admin-print-${item.id}`}
+              onPress={() => {
+                if (printers.length <= 1) handlePrint(item, printers[0]?.id);
+                else setPrintFor(item);
+              }}
+              style={styles.printBtn}
+            >
+              <Printer color={COLORS.brand} size={16} weight="fill" />
+              <Text style={styles.printText}>Imprimir comanda</Text>
+            </Pressable>
           </View>
         )}
       />
@@ -161,6 +188,37 @@ export default function Admin() {
               >
                 <Text style={styles.sheetOptText}>{m.name}</Text>
                 <Text style={styles.sheetOptSub}>{m.phone}</Text>
+              </Pressable>
+            ))}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Printer picker */}
+      <Modal visible={!!printFor} animationType="slide" transparent onRequestClose={() => setPrintFor(null)}>
+        <Pressable style={styles.backdrop} onPress={() => setPrintFor(null)}>
+          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.sheetHead}>
+              <Text style={styles.sheetTitle}>Escolher impressora</Text>
+              <Pressable onPress={() => setPrintFor(null)}><X color={COLORS.onSurface} size={22} /></Pressable>
+            </View>
+            {printers.length === 0 && (
+              <Text style={{ color: COLORS.muted, padding: SPACING.md }}>
+                Nenhuma impressora cadastrada. Cadastre em Configurações → Impressoras.
+              </Text>
+            )}
+            {printers.map((p) => (
+              <Pressable
+                key={p.id}
+                testID={`printer-opt-${p.id}`}
+                disabled={printing}
+                onPress={() => printFor && handlePrint(printFor, p.id)}
+                style={styles.sheetOpt}
+              >
+                <Text style={styles.sheetOptText}>
+                  {p.name} {p.is_default ? "⭐" : ""}
+                </Text>
+                <Text style={styles.sheetOptSub}>{p.width_mm}mm {p.model ? `• ${p.model}` : ""}</Text>
               </Pressable>
             ))}
           </Pressable>

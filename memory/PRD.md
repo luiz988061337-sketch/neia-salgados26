@@ -1,6 +1,23 @@
 # Néia Salgados — PRD
 
-## Última entrega — Agendamento estendido
+## Última entrega — Todas categorias no cadastro + Impressão de comandas
+
+### 1. Bug fix — Todas categorias no cadastro
+- Botão "+" na tela `/staff/products` agora abre um modal vazio (não força criação com categoria "bebida" como antes).
+- Seletor de categoria mostra as 9 opções do cardápio: 🎉 Combos, 🍗 Fritos, ❄️ Congelados, 🥤 Bebidas, 🥟 Mini Fritos, 🍞 Mini Assados, 🥟 Mini Pastelzinho, 🍕 Mini Pizza, 🥧 Mini Empada.
+- Cada mini-* mapeia para `category="frito"` + `subcategory` correspondente ao ser salvo.
+
+### 2. Impressão de comandas
+- Nova tela `/staff/print-templates`: CRUD de modelos com editor de cabeçalho/corpo/rodapé, largura 58 ou 80mm, placeholders {short_code}, {customer_name}, {items}, {total} etc.
+- Nova tela `/staff/printers`: cadastrar impressoras (nome, modelo, template, largura, is_default, ativa).
+- Backend seed cria automaticamente 2 modelos (80mm padrão + 58mm compacto) e 1 impressora "Impressora Balcão".
+- Botão "Imprimir comanda" em cada card do admin kanban (`/staff/admin`) — abre diálogo de impressão nativo via `expo-print` (PDF → sistema).
+- Endpoint `GET /api/admin/orders/{id}/receipt?printer_id=` retorna o texto renderizado + largura + template.
+
+### 3. Testes
+- 50/50 pytest passando (38 originais + 12 novos de impressão/categorias).
+
+## Entrega anterior — Agendamento estendido
 
 ### Agendamento até 15 dias
 - Cliente pode agendar entrega em qualquer dia até 15 dias no futuro (antes era ilimitado)

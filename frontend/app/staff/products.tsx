@@ -25,6 +25,7 @@ export default function StaffProducts() {
   const [themeName, setThemeName] = useState<string | null>(null);
   const [isFeatured, setIsFeatured] = useState(false);
   const [category, setCategory] = useState<string>("combo");
+  const [subcategory, setSubcategory] = useState<string | null>(null);
   const [unitSize, setUnitSize] = useState<string>("50");
 
   const load = async () => {
@@ -32,6 +33,18 @@ export default function StaffProducts() {
     setThemes(await api.adminThemes());
   };
   useEffect(() => { load(); }, []);
+
+  const resetForm = () => {
+    setName(""); setDescription("");
+    setPriceStr(""); setImageUrl(""); setImageUrls([]);
+    setThemeName(null); setIsFeatured(false);
+    setCategory("combo"); setSubcategory(null); setUnitSize("50");
+  };
+
+  const openCreate = () => {
+    setEditing({ id: "__new__" } as any);
+    resetForm();
+  };
 
   const openEdit = (p: Product) => {
     setEditing(p);
@@ -42,6 +55,7 @@ export default function StaffProducts() {
     setThemeName(p.theme || null);
     setIsFeatured(!!p.is_featured);
     setCategory(p.category);
+    setSubcategory((p as any).subcategory || null);
     setUnitSize(String(p.unit_size || (p.category === "combo" || p.category === "frito" ? 50 : 1)));
   };
 
@@ -72,19 +86,30 @@ export default function StaffProducts() {
 
   const save = async () => {
     if (!editing) return;
+    if (!name.trim()) { Alert.alert("Erro", "Informe o nome do produto"); return; }
+    const priceNum = Number(priceStr.replace(",", "."));
+    if (!priceNum || priceNum <= 0) { Alert.alert("Erro", "Informe um preço válido"); return; }
     setSaving(true);
     try {
       const us = Math.max(1, Number(unitSize) || 1);
-      await api.adminUpdateProduct(editing.id, {
-        name, description,
-        price: Number(priceStr.replace(",", ".")),
+      const isBulk = category === "combo" || category === "frito";
+      const payload: any = {
+        name: name.trim(),
+        description,
+        price: priceNum,
         image_url: imageUrl,
         image_urls: imageUrls,
         theme: themeName || null,
         is_featured: isFeatured,
         category,
-        unit_size: (category === "combo" || category === "frito") ? Math.max(50, us) : us,
-      } as any);
+        subcategory: subcategory || null,
+        unit_size: isBulk ? Math.max(50, us) : us,
+      };
+      if ((editing as any).id === "__new__") {
+        await api.adminCreateProduct(payload);
+      } else {
+        await api.adminUpdateProduct((editing as any).id, payload);
+      }
       setEditing(null);
       await load();
     } catch (e: any) {
@@ -101,22 +126,7 @@ export default function StaffProducts() {
         <Text style={styles.title}>Cardápio & Fotos</Text>
         <Pressable
           testID="new-product-btn"
-          onPress={async () => {
-            const cats = ["combo", "frito", "congelado", "bebida"];
-            const idx = cats.indexOf("bebida");
-            try {
-              const p = await api.adminCreateProduct({
-                name: "Novo produto",
-                description: "Descreva aqui...",
-                category: cats[idx] as any,
-                price: 5,
-                unit_size: 1,
-                image_url: "",
-              } as any);
-              await load();
-              openEdit(p);
-            } catch (e: any) { Alert.alert("Erro", e.message); }
-          }}
+          onPress={openCreate}
           style={[styles.iconBtn, { backgroundColor: COLORS.brand }]}
         >
           <Plus color={COLORS.surface} size={18} weight="bold" />
@@ -148,7 +158,7 @@ export default function StaffProducts() {
         <Pressable style={styles.backdrop} onPress={() => setEditing(null)}>
           <Pressable style={[styles.sheet, { maxHeight: "92%" }]} onPress={(e) => e.stopPropagation()}>
             <View style={styles.sheetHead}>
-              <Text style={styles.sheetTitle}>Editar produto</Text>
+              <Text style={styles.sheetTitle}>{(editing as any)?.id === "__new__" ? "Novo produto" : "Editar produto"}</Text>
               <Pressable onPress={() => setEditing(null)}><X color={COLORS.onSurface} size={22} /></Pressable>
             </View>
             <ScrollView contentContainerStyle={{ gap: SPACING.md }} keyboardShouldPersistTaps="handled">
@@ -194,19 +204,33 @@ export default function StaffProducts() {
               <Field label="Categoria">
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: SPACING.sm, paddingVertical: 4 }}>
                   {[
-                    { id: "combo", label: "Combo" },
-                    { id: "frito", label: "Frito" },
-                    { id: "congelado", label: "Congelado" },
-                    { id: "bebida", label: "Bebida" },
-                  ].map((c) => (
-                    <Pressable key={c.id} testID={`cat-${c.id}`} onPress={() => {
-                      setCategory(c.id);
-                      if (c.id === "combo" || c.id === "frito") setUnitSize("50");
-                      else setUnitSize("1");
-                    }} style={[styles.chip, category === c.id && styles.chipActive]}>
-                      <Text style={[styles.chipText, category === c.id && styles.chipTextActive]}>{c.label}</Text>
-                    </Pressable>
-                  ))}
+                    { id: "combo", sub: null, label: "🎉 Combos" },
+                    { id: "frito", sub: null, label: "🍗 Fritos" },
+                    { id: "congelado", sub: null, label: "❄️ Congelados" },
+                    { id: "bebida", sub: null, label: "🥤 Bebidas" },
+                    { id: "frito", sub: "mini-fritos", label: "🥟 Mini Fritos" },
+                    { id: "frito", sub: "mini-assados", label: "🍞 Mini Assados" },
+                    { id: "frito", sub: "mini-pastelzinho", label: "🥟 Mini Pastelzinho" },
+                    { id: "frito", sub: "mini-pizza", label: "🍕 Mini Pizza" },
+                    { id: "frito", sub: "mini-empada", label: "🥧 Mini Empada" },
+                  ].map((c) => {
+                    const isActive = category === c.id && (subcategory || null) === c.sub;
+                    return (
+                      <Pressable
+                        key={`${c.id}:${c.sub || "none"}`}
+                        testID={`cat-${c.id}${c.sub ? `-${c.sub}` : ""}`}
+                        onPress={() => {
+                          setCategory(c.id);
+                          setSubcategory(c.sub);
+                          if (c.id === "combo" || c.id === "frito") setUnitSize("50");
+                          else setUnitSize("1");
+                        }}
+                        style={[styles.chip, isActive && styles.chipActive]}
+                      >
+                        <Text style={[styles.chipText, isActive && styles.chipTextActive]}>{c.label}</Text>
+                      </Pressable>
+                    );
+                  })}
                 </ScrollView>
               </Field>
 
