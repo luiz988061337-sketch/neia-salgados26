@@ -1,6 +1,28 @@
 # Néia Salgados — PRD
 
-## Última entrega — Todas categorias no cadastro + Impressão de comandas
+## Última entrega — Rota no motoboy + Link ao cliente
+
+### 1. Botão "Abrir rota no maps" no motoboy
+- Cada card de pedido na tela `/staff/motoboy` agora tem 2 formas de abrir a rota:
+  - Ícone circular verde (NavigationArrow) ao lado do botão de chat
+  - Botão pill amplo "Abrir rota no maps" abaixo dos CTAs
+- Deep-link nativo:
+  - iOS: `maps://?daddr=lat,lng&dirflg=d` (Apple Maps)
+  - Android: `google.navigation:q=lat,lng&mode=d` (Google Maps navegação)
+  - Fallback web: `https://www.google.com/maps/dir/...`
+- Se o pedido não tiver GPS (`delivery_lat`/`delivery_lng`), usa busca por endereço.
+- Funciona **sem** precisar de Twilio.
+
+### 2. Link de acompanhamento para o cliente
+- Quando o motoboy toca "Iniciar entrega" (`POST /motoboy/{id}/start-delivery/{order_id}`), o backend:
+  - Marca `status = saiu_entrega`
+  - Cria notificação in-app "🛵 Pedido #XXXX a caminho"
+  - Envia mensagem WhatsApp para o cliente com o link `/order/{id}` para tracking em tempo real
+- Também acionado quando o admin muda o status para `saiu_entrega` via `PATCH /admin/orders/{id}/status`.
+- Nova função `notify_customer_out_for_delivery` reutilizada em ambos os fluxos.
+- Log registrado em `message_logs` com `kind: out_for_delivery`.
+
+## Entrega anterior — Todas categorias no cadastro + Impressão de comandas
 
 ### 1. Bug fix — Todas categorias no cadastro
 - Botão "+" na tela `/staff/products` agora abre um modal vazio (não força criação com categoria "bebida" como antes).

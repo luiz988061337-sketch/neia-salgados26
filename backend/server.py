@@ -84,6 +84,33 @@ def send_whatsapp(phone: str, body: Optional[str] = None, template_sid: Optional
     except Exception as e:
         return {"sent": False, "reason": str(e)}
 
+
+APP_PUBLIC_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "").rstrip("/")
+
+
+def _tracking_link(order_id: str) -> str:
+    base = APP_PUBLIC_URL or ""
+    return f"{base}/order/{order_id}" if base else f"/order/{order_id}"
+
+
+async def notify_customer_out_for_delivery(order: dict):
+    """Envia mensagem ao cliente com link de acompanhamento quando o pedido sai para entrega."""
+    if not order:
+        return {"sent": False, "reason": "no_order"}
+    if not order.get("customer", {}).get("whatsapp_opt_in", True):
+        return {"sent": False, "reason": "opt_out"}
+    if not twilio_ready():
+        return {"sent": False, "reason": "twilio_not_configured"}
+    name = order["customer"].get("name", "")
+    phone = order["customer"].get("phone", "")
+    link = _tracking_link(order["id"])
+    moto = order.get("motoboy_name") or "seu entregador"
+    msg = (
+        f"🛵 Olá {name}! Seu pedido *#{order['short_code']}* saiu para entrega com {moto}.\n"
+        f"Acompanhe em tempo real: {link}"
+    )
+    return send_whatsapp(phone, body=msg)
+
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
 
@@ -1424,7 +1451,24 @@ async def start_delivery(motoboy_id: str, order_id: str):
     )
     if r.matched_count == 0:
         raise HTTPException(404, "Pedido não encontrado ou não atribuído")
-    return {"ok": True}
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    # In-app notification
+    if order:
+        await create_notification(
+            phone=order["customer"]["phone"],
+            title=f"🛵 Pedido #{order['short_code']} a caminho",
+            body=f"Seu entregador saiu com o pedido. Acompanhe em tempo real!",
+            kind="status", order_id=order_id,
+        )
+    # WhatsApp com link de acompanhamento
+    notify = await notify_customer_out_for_delivery(order or {})
+    if order:
+        await db.message_logs.insert_one({
+            "id": str(uuid.uuid4()), "kind": "out_for_delivery",
+            "order_id": order_id, "phone": order["customer"]["phone"],
+            "result": notify, "created_at": now,
+        })
+    return {"ok": True, "notification": notify}
 
 
 @api_router.post("/motoboy/{motoboy_id}/complete/{order_id}")
@@ -1524,15 +1568,19 @@ async def admin_update_status(order_id: str, body: StatusUpdate):
         )
     if settings.get("auto_whatsapp") and twilio_ready() and order:
         if order["customer"].get("whatsapp_opt_in", True):
-            labels = {"recebido": "🥟 recebido", "fritando": "🔥 em preparo",
-                      "saiu_entrega": "🛵 saiu para entrega", "entregue": "✅ entregue",
-                      "cancelado": "❌ cancelado"}
-            label = labels.get(body.status, body.status)
-            msg = (
-                f"Olá {order['customer']['name']}! Seu pedido *#{order['short_code']}* na Néia Salgados "
-                f"está {label}."
-            )
-            r2 = send_whatsapp(order["customer"]["phone"], body=msg)
+            if body.status == "saiu_entrega":
+                # Enviar mensagem com link de acompanhamento
+                r2 = await notify_customer_out_for_delivery(order)
+            else:
+                labels = {"recebido": "🥟 recebido", "fritando": "🔥 em preparo",
+                          "saiu_entrega": "🛵 saiu para entrega", "entregue": "✅ entregue",
+                          "cancelado": "❌ cancelado"}
+                label = labels.get(body.status, body.status)
+                msg = (
+                    f"Olá {order['customer']['name']}! Seu pedido *#{order['short_code']}* na Néia Salgados "
+                    f"está {label}."
+                )
+                r2 = send_whatsapp(order["customer"]["phone"], body=msg)
             notify_result = r2
             await db.message_logs.insert_one({
                 "id": str(uuid.uuid4()), "kind": "status", "order_id": order_id,

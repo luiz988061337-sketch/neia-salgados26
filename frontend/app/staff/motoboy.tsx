@@ -1,9 +1,9 @@
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { FlatList, Linking, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Location from "expo-location";
-import { ArrowLeft, ChatCircle, MapPin, Motorcycle, SignOut } from "phosphor-react-native";
+import { ArrowLeft, ChatCircle, MapPin, Motorcycle, NavigationArrow, SignOut } from "phosphor-react-native";
 
 import { COLORS, RADIUS, SPACING } from "@/src/theme";
 import { api, Order } from "@/src/api";
@@ -86,6 +86,32 @@ export default function MotoboyScreen() {
     router.replace("/(tabs)/profile");
   };
 
+  const openMaps = (order: Order) => {
+    const lat = (order.customer as any).delivery_lat;
+    const lng = (order.customer as any).delivery_lng;
+    let url = "";
+    if (lat && lng) {
+      // Prefer native scheme, fallback to Google Maps web
+      if (Platform.OS === "ios") {
+        url = `maps://?daddr=${lat},${lng}&dirflg=d`;
+      } else if (Platform.OS === "android") {
+        url = `google.navigation:q=${lat},${lng}&mode=d`;
+      } else {
+        url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+      }
+    } else {
+      const addr = encodeURIComponent(order.customer.address + " " + (order.customer.complement || ""));
+      url = `https://www.google.com/maps/search/?api=1&query=${addr}`;
+    }
+    Linking.openURL(url).catch(() => {
+      // Fallback web maps
+      const fallback = lat && lng
+        ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
+        : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.customer.address)}`;
+      Linking.openURL(fallback).catch(() => {});
+    });
+  };
+
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <View style={styles.header}>
@@ -146,10 +172,17 @@ export default function MotoboyScreen() {
                   <Text style={styles.ctaText}>Marcar como entregue</Text>
                 </Pressable>
               )}
+              <Pressable testID={`maps-${item.id}`} onPress={() => openMaps(item)} style={styles.mapsBtn}>
+                <NavigationArrow color={COLORS.surface} size={18} weight="fill" />
+              </Pressable>
               <Pressable testID={`chat-${item.id}`} onPress={() => setChatOrder(item)} style={styles.chatBtn}>
                 <ChatCircle color={COLORS.surface} size={18} weight="fill" />
               </Pressable>
             </View>
+            <Pressable testID={`maps-full-${item.id}`} onPress={() => openMaps(item)} style={styles.mapsFull}>
+              <NavigationArrow color={COLORS.brand} size={16} weight="bold" />
+              <Text style={styles.mapsFullText}>Abrir rota no maps</Text>
+            </Pressable>
           </View>
         )}
       />
@@ -196,4 +229,7 @@ const styles = StyleSheet.create({
   ctaText: { color: COLORS.surface, fontWeight: "800", fontSize: 13 },
   rowBtns: { flexDirection: "row", gap: SPACING.sm, marginTop: SPACING.sm, alignItems: "center" },
   chatBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.info, alignItems: "center", justifyContent: "center" },
+  mapsBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.success, alignItems: "center", justifyContent: "center" },
+  mapsFull: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginTop: SPACING.sm, paddingVertical: 10, borderRadius: RADIUS.pill, backgroundColor: COLORS.brandTertiary, borderWidth: 1, borderColor: COLORS.brand },
+  mapsFullText: { color: COLORS.brand, fontWeight: "800", fontSize: 12 },
 });
