@@ -126,7 +126,8 @@ export default function Admin() {
                     await api.adminUpdateStatus(statusFor.id, s);
                     const updated = { ...statusFor, status: s as any };
                     setStatusFor(null);
-                    if (settings?.auto_whatsapp) {
+                    // If auto is enabled and Twilio NOT ready, open wa.me. If Twilio ready, backend already sent.
+                    if (settings?.auto_whatsapp && !settings?.twilio_ready) {
                       openWhatsApp(updated.customer.phone, orderStatusMessage(updated, process.env.EXPO_PUBLIC_BACKEND_URL || ""));
                     }
                     load();

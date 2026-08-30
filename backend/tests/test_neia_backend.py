@@ -75,12 +75,14 @@ def _make_item(prod, qty):
 
 
 def _make_payload(items, coupon=None):
+    # Use scheduled_for to bypass working-hours check in tests
     return {
         "customer": {"name": "TEST_Cliente", "phone": "11988887777", "address": "Rua X, 100", "complement": ""},
         "items": items,
         "payment_method": "pix",
         "coupon_code": coupon,
         "notes": "",
+        "scheduled_for": "2099-01-01T14:00:00Z",
     }
 
 

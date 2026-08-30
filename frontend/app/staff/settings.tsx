@@ -1,7 +1,7 @@
 import { useRouter } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft, CaretRight, ForkKnife, MapPin, Ranking, Sparkle, Storefront } from "phosphor-react-native";
+import { ArrowLeft, CaretRight, ForkKnife, Gift, MapPin, Ranking, Sparkle, Storefront } from "phosphor-react-native";
 
 import { COLORS, RADIUS, SPACING } from "@/src/theme";
 
@@ -33,6 +33,13 @@ export default function StaffSettings() {
           title="Ranking de Motoboys"
           subtitle="Quem entregou mais rápido hoje"
           onPress={() => router.push("/staff/ranking")}
+        />
+        <Row
+          testID="go-birthdays"
+          icon={<Gift color={COLORS.brand} size={22} weight="fill" />}
+          title="Aniversariantes de Hoje"
+          subtitle="Enviar cupons de aniversário via WhatsApp"
+          onPress={() => router.push("/staff/birthdays")}
         />
         <Row
           testID="go-products"

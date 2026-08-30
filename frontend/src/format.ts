@@ -6,7 +6,7 @@ export const brl = (v: number) => `R$ ${v.toFixed(2).replace(".", ",")}`;
 export const statusLabel = (s: string) => {
   const map: Record<string, string> = {
     recebido: "Recebido",
-    fritando: "Fritando",
+    fritando: "Em preparo",
     saiu_entrega: "Saiu para entrega",
     entregue: "Entregue",
     cancelado: "Cancelado",

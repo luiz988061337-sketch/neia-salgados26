@@ -6,8 +6,8 @@ const cleanPhone = (p: string) => p.replace(/\D/g, "");
 export function orderStatusMessage(o: Order, appUrl: string): string {
   const url = `${appUrl}/order/${o.id}`;
   const labelByStatus: Record<string, string> = {
-    recebido: "🥟 Recebemos o seu pedido! Já já ele entra na fritadeira.",
-    fritando: "🔥 Seu pedido já está fritando, quentinho e crocante!",
+    recebido: "🥟 Recebemos o seu pedido! Já já ele entra no preparo.",
+    fritando: "🔥 Seu pedido já está em preparo, quentinho e crocante!",
     saiu_entrega: `🛵 Seu pedido saiu para entrega${o.motoboy_name ? ` com ${o.motoboy_name}` : ""}. Acompanhe pelo link!`,
     entregue: "✅ Pedido entregue! Bom apetite e obrigado pela preferência 💛",
     cancelado: "❌ Infelizmente seu pedido foi cancelado. Fale com a gente para entender.",

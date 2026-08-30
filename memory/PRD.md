@@ -1,75 +1,64 @@
 # Néia Salgados — PRD
 
 ## Visão
-App mobile (Expo) para clientes fazerem pedidos de salgados da Néia (combos, fritos 50-em-50, congelados), com rastreamento de motoboys em tempo real, painel admin completo e configurações operacionais.
+App mobile (Expo) para clientes fazerem pedidos de salgados da Néia com rastreamento em tempo real, painel admin completo, taxas por km, aviso automático, agendamento, aniversariantes e horário de funcionamento.
 
-## Funcionalidades entregues
+## Novas funcionalidades (5)
 
-### Cliente (sem login)
-- Home com destaques, hero, combos e banners de tema ativo
-- Cardápio com filtros: Tudo / Combos / Fritos / Congelados
-- Combo builder com stepper 50 em 50 + seletor de sabores
-- Congelados a partir de 1 unidade
-- Carrinho persistente
-- **Checkout com localização no mapa** (arrastar pino ou usar GPS) → distância em km e taxa calculadas automaticamente
-- **Agendar entrega para data/hora futura** (opcional)
-- Pagamento: Pix, Dinheiro (troco), Cartão na entrega
-- Cupom validado (NEIA10, PRIMEIRO)
-- Meus Pedidos + tracking com timeline + mapa GPS quando motoboy sai
-- Compartilhar pedido no WhatsApp
+### 1. Status "Em preparo" (antes "Fritando")
+- Label alterado em todo o app (timeline, painel admin, WhatsApp)
+- ID interno segue como `fritando` para manter compatibilidade com dados existentes
 
-### Motoboy
-- Login por telefone + senha
-- Lista de entregas atribuídas
-- "Iniciar entrega" pede permissão GPS + envia posição a cada 8s
-- "Marcar como entregue" registra `delivered_at`
+### 2. Cardápio de Domingo (horário de funcionamento)
+- Settings: `open_days` (0=Dom..6=Sáb, default [1..6] Seg-Sáb), `open_time` "10:00", `close_time` "20:00"
+- Home mostra banner amarelo 🌙 "Loja fechada" quando fora do horário
+- Checkout bloqueia pedido sem agendamento fora do horário; força toggle "Agendar"
+- Backend `POST /api/orders` rejeita 400 se loja fechada e sem `scheduled_for`
+- Admin edita dias e horários em Configurações → Loja & Taxa por km
 
-### Admin (senha `neia2026`)
-- Painel de pedidos com filtros por status
-- Cada pedido mostra distância em km e badge de agendamento
-- Alterar status → **abre WhatsApp automaticamente** com mensagem contextual (se aviso automático ligado)
-- Botão manual "Avisar cliente pelo WhatsApp" em cada pedido
-- Atribuir/trocar motoboy
-- **Configurações → Loja & Taxa por km**:
-  - Localização da loja (mapa)
-  - Taxa base (até 3 km), taxa por km, mínimo, raio máximo
-  - Toggle Aviso automático no WhatsApp
-- **Configurações → Ranking Motoboys**: quem entregou mais rápido hoje (KPIs + medalhas 🥇🥈🥉 + tempo médio de entrega)
-- Configurações → Cardápio & Fotos: editar produtos + upload de fotos reais (câmera/galeria via Object Storage)
-- Configurações → Bairros (legado): CRUD de bairros com taxa própria (sobrepõe km quando definido)
-- Configurações → Cardápio de Feriado: temas Copa / Festa Junina
+### 3. Cupom de Aniversário
+- Campo aniversário (MM-DD) opcional no checkout
+- Ao criar pedido, se `birthday` == hoje → aplica automático cupom `ANIVERSARIO{pct}%` (padrão 20%, editável no admin)
+- Perfil do cliente persistido em `db.customers` (upsert por telefone)
+- Admin → **Aniversariantes de Hoje**: lista clientes que aniversariam, botão "Enviar cupons para todos" (via Twilio se configurado, senão wa.me em massa)
+- `GET /api/admin/birthdays/today` e `POST /api/admin/birthdays/send` (idempotente por dia/cliente)
 
-## Integrações
-- **Emergent Managed Object Storage** para upload de fotos
-- **expo-location** para GPS
-- **react-native-maps** com fallback web
-- **expo-image-picker** para foto
-- **@react-native-community/datetimepicker** para agendamento
-- **Linking** para WhatsApp (wa.me)
+### 4. Combos Sugestivos
+- No combo builder, se o cliente concentra tudo em 1 sabor, aparece card "Que tal misturar sabores?" → toca e o app distribui igualmente entre todos os sabores
 
-## Endpoints
-- `GET /api/settings` — store info + tarifas (público)
-- `GET /api/admin/settings` + `PATCH /api/admin/settings` — atualizar loja e tarifas
-- `POST /api/orders` — computa distância haversine, valida raio máximo, aplica taxa por km
-- `PATCH /api/admin/orders/{id}/status` — marca `delivered_at` quando status vira entregue
-- `GET /api/admin/motoboys/ranking?date=YYYY-MM-DD` — ranking por tempo médio de entrega
-- (mantidos) products, orders, motoboys, coupons, neighborhoods, themes, upload
+### 5. Aviso pelo Servidor (Twilio WhatsApp)
+- Backend integra `twilio` SDK (endpoint `PATCH /api/admin/orders/{id}/status` envia mensagem se `auto_whatsapp=True` e Twilio configurado)
+- Fallback gracioso: se Twilio não configurado, admin app abre wa.me no celular (comportamento anterior)
+- Store settings mostra badge verde ✅/amarelo ⚠️ indicando se Twilio está pronto
+- Env vars TWILIO_* em `backend/.env` como placeholders — usuário preenche em Publish → Secrets
 
-## Seeds
-- 8 produtos (2 combos, 2 fritos, 2 congelados, 2 temáticos)
-- 4 bairros legados
-- 2 temas (Copa, Festa Junina)
-- 2 motoboys
-- 2 cupons
-- Store default: São Paulo (Av. Paulista), taxa base R$ 6 (até 3 km), R$ 2/km adicional, raio 15 km
+## Endpoints novos
+- `GET /api/store-status` — is_open, open_days, open_time, close_time
+- `GET /api/admin/birthdays/today` — clientes que aniversariam hoje
+- `POST /api/admin/birthdays/send` — envia cupons via Twilio (idempotente)
+- Settings agora aceita `open_days`, `open_time`, `close_time`, `birthday_coupon_pct`
+- `GET /api/admin/settings` inclui `twilio_ready: bool`
+
+## Como o admin configura Twilio
+1. Criar conta em twilio.com → Messaging → Try WhatsApp (Sandbox)
+2. Copiar `Account SID`, `API Key SID`, `API Key Secret` (ou Auth Token)
+3. Publish → Secrets no Emergent:
+   - TWILIO_ACCOUNT_SID
+   - TWILIO_API_KEY_SID + TWILIO_API_KEY_SECRET (recomendado) OU TWILIO_AUTH_TOKEN
+   - TWILIO_WHATSAPP_FROM (`whatsapp:+14155238886` no Sandbox)
+4. Cliente precisa enviar `join <código>` para o Sandbox antes de receber
+5. Após deploy, badge no admin muda para "✅ Twilio configurado"
 
 ## Testes
-- 26/26 backend pytests passando (fee agora aceita >=6)
-- Distância + fee validados via curl (5 km → R$ 9,90 = 6 + 1,95×2)
-- Ranking validado via curl (Carlos Silva 1 entrega 0.2min R$ 89,80)
-- Object storage upload validado
-- Frontend visualmente validado (checkout com mapa+agendamento, store settings, ranking)
+- 26/26 backend pytests passando (agora com `scheduled_for` para bypassar horário)
+- Fluxos validados via curl:
+  - Loja fechada → 400 ✓
+  - Scheduled_for → aceita ✓
+  - Aniversário hoje → aplica 20% off automaticamente ✓
+  - `send-birthdays` retorna `twilio_not_configured` gracefully ✓
+- Screenshots visuais confirmam: banner "Loja fechada" na home, dias da semana no admin, aniversariantes com badge Twilio, hub de configurações com 6 opções
 
 ## Notas
-- Auto-WhatsApp: quando ligado, o WhatsApp abre no aparelho do admin imediatamente após mudança de status. Requer app do WhatsApp instalado.
-- Map picker: precisa Expo Go / build nativo (web mostra card fallback com botão GPS).
+- Sandbox Twilio: número de teste `+14155238886`; clientes precisam fazer join para receber; produção requer template aprovado + número Business
+- WhatsApp opt-in: campo `whatsapp_opt_in=true` por padrão; adicionar checkbox no futuro se necessário
+- Combos Sugestivos: aparece quando 1 único sabor selecionado com >= (n_sabores × 5)

@@ -4,7 +4,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft, CheckCircle, Minus, Plus } from "phosphor-react-native";
+import { ArrowLeft, CheckCircle, Minus, Plus, Sparkle } from "phosphor-react-native";
 
 import { COLORS, RADIUS, SPACING } from "@/src/theme";
 import { api, CartItem, fileUrl, getCart, Product, saveCart } from "@/src/api";
@@ -127,6 +127,32 @@ export default function ProductDetail() {
                 {totalFlavors}/{qty}
               </Text>
             </View>
+
+            {/* Combo suggestion: if user placed everything in a single flavor */}
+            {product.flavors.length > 1 && (() => {
+              const active = Object.values(flavors).filter((v) => v > 0).length;
+              if (active !== 1 || qty < product.flavors.length * 5) return null;
+              return (
+                <Pressable
+                  testID="combo-suggestion"
+                  onPress={() => {
+                    const per = Math.floor(qty / product.flavors.length);
+                    const remainder = qty - per * (product.flavors.length - 1);
+                    const next: Record<string, number> = {};
+                    product.flavors.forEach((f, idx) => { next[f] = idx === 0 ? remainder : per; });
+                    setFlavors(next);
+                  }}
+                  style={styles.suggestBox}
+                >
+                  <Sparkle color={COLORS.brand} size={20} weight="fill" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.suggestTitle}>Que tal misturar sabores?</Text>
+                    <Text style={styles.suggestSub}>Toque para distribuir igualmente entre os {product.flavors.length} sabores. Combos sortidos são a preferência da maioria!</Text>
+                  </View>
+                </Pressable>
+              );
+            })()}
+
             <View style={{ gap: SPACING.sm, marginTop: SPACING.md }}>
               {product.flavors.map((f) => (
                 <View key={f} style={styles.flavorRow}>
@@ -223,4 +249,7 @@ const styles = StyleSheet.create({
     shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 4,
   },
   toastText: { fontSize: 13, fontWeight: "700", color: COLORS.onSurface },
+  suggestBox: { flexDirection: "row", gap: SPACING.md, padding: SPACING.md, marginTop: SPACING.sm, backgroundColor: COLORS.brandTertiary, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.brand, alignItems: "center" },
+  suggestTitle: { fontSize: 14, fontWeight: "800", color: COLORS.onBrandTertiary },
+  suggestSub: { fontSize: 12, color: COLORS.onBrandTertiary, marginTop: 2 },
 });

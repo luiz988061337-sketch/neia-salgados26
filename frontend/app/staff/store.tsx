@@ -2,7 +2,7 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft, ChatCircleText, MapPin } from "phosphor-react-native";
+import { ArrowLeft, ChatCircleText, Gift, MapPin } from "phosphor-react-native";
 
 import { COLORS, RADIUS, SPACING } from "@/src/theme";
 import { api, Settings } from "@/src/api";
@@ -37,6 +37,10 @@ export default function StaffStore() {
         max_delivery_km: Number(settings.max_delivery_km),
         auto_whatsapp: settings.auto_whatsapp,
         admin_phone: settings.admin_phone,
+        open_days: settings.open_days,
+        open_time: settings.open_time,
+        close_time: settings.close_time,
+        birthday_coupon_pct: Number(settings.birthday_coupon_pct),
       });
       setSettings(updated);
       Alert.alert("Salvo", "Configurações atualizadas.");
@@ -89,17 +93,68 @@ export default function StaffStore() {
           </Field>
         </Section>
 
+        <Section title="Dias e horário de funcionamento">
+          <View style={styles.daysRow}>
+            {["D", "S", "T", "Q", "Q", "S", "S"].map((letter, idx) => {
+              const active = (settings.open_days || []).includes(idx);
+              return (
+                <Pressable
+                  key={idx}
+                  testID={`day-${idx}`}
+                  onPress={() => {
+                    const cur = settings.open_days || [];
+                    const next = active ? cur.filter((d) => d !== idx) : [...cur, idx].sort();
+                    set("open_days", next);
+                  }}
+                  style={[styles.dayChip, active && styles.dayChipOn]}
+                >
+                  <Text style={[styles.dayText, active && styles.dayTextOn]}>{letter}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <View style={styles.timeRow}>
+            <Field label="Abre">
+              <TextInput testID="s-open" value={settings.open_time} onChangeText={(t) => set("open_time", t)} placeholder="10:00" style={styles.input} />
+            </Field>
+            <Field label="Fecha">
+              <TextInput testID="s-close" value={settings.close_time} onChangeText={(t) => set("close_time", t)} placeholder="20:00" style={styles.input} />
+            </Field>
+          </View>
+        </Section>
+
+        <Section title="Cupom de aniversário">
+          <View style={styles.giftRow}>
+            <Gift color={COLORS.brand} size={22} weight="fill" />
+            <Text style={styles.giftText}>Desconto para aniversariantes</Text>
+          </View>
+          <Field label="% de desconto">
+            <TextInput testID="s-birthday-pct" value={String(settings.birthday_coupon_pct)} onChangeText={(t) => set("birthday_coupon_pct", t.replace(/\D/g, ""))} keyboardType="numeric" style={styles.input} />
+          </Field>
+        </Section>
+
         <Section title="Aviso automático no WhatsApp">
           <Pressable testID="auto-wa-toggle" onPress={() => set("auto_whatsapp", !settings.auto_whatsapp)} style={[styles.toggleCard, settings.auto_whatsapp && styles.toggleCardOn]}>
             <ChatCircleText color={settings.auto_whatsapp ? "#128C7E" : COLORS.muted} size={22} weight={settings.auto_whatsapp ? "fill" : "regular"} />
             <View style={{ flex: 1 }}>
               <Text style={[styles.toggleTitle, settings.auto_whatsapp && { color: "#128C7E" }]}>{settings.auto_whatsapp ? "Ligado" : "Desligado"}</Text>
-              <Text style={styles.toggleSub}>Quando ligado, o WhatsApp abre sozinho ao mudar o status do pedido</Text>
+              <Text style={styles.toggleSub}>
+                {settings.twilio_ready
+                  ? "Servidor enviará o WhatsApp direto para o cliente"
+                  : "Sem Twilio configurado — abre o wa.me no seu celular ao mudar status"}
+              </Text>
             </View>
             <View style={[styles.switch, settings.auto_whatsapp && styles.switchOn]}>
               <View style={[styles.knob, settings.auto_whatsapp && styles.knobOn]} />
             </View>
           </Pressable>
+          <View style={[styles.tw, settings.twilio_ready ? styles.twOn : styles.twOff]}>
+            <Text style={styles.twText}>
+              {settings.twilio_ready
+                ? "✅ Twilio configurado — envio pelo servidor ativo"
+                : "⚠️ Twilio não configurado — preencha TWILIO_* em Publish → Secrets para envio automático pelo servidor"}
+            </Text>
+          </View>
         </Section>
 
         <Pressable testID="store-save" onPress={save} disabled={saving} style={[styles.cta, saving && { opacity: 0.6 }]}>
@@ -141,6 +196,18 @@ const styles = StyleSheet.create({
   switchOn: { backgroundColor: "#25D366" },
   knob: { width: 20, height: 20, borderRadius: 10, backgroundColor: COLORS.surface },
   knobOn: { transform: [{ translateX: 18 }] },
+  daysRow: { flexDirection: "row", gap: SPACING.xs, justifyContent: "space-between" },
+  dayChip: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface },
+  dayChipOn: { backgroundColor: COLORS.brand, borderColor: COLORS.brand },
+  dayText: { fontSize: 14, fontWeight: "800", color: COLORS.onSurface },
+  dayTextOn: { color: COLORS.surface },
+  timeRow: { flexDirection: "row", gap: SPACING.md, marginTop: SPACING.sm },
+  giftRow: { flexDirection: "row", alignItems: "center", gap: SPACING.sm, marginBottom: SPACING.sm },
+  giftText: { fontSize: 14, fontWeight: "700", color: COLORS.onSurface },
+  tw: { padding: SPACING.md, borderRadius: RADIUS.md, marginTop: SPACING.sm },
+  twOn: { backgroundColor: "#DFF0E7" },
+  twOff: { backgroundColor: "#FFF3D8" },
+  twText: { fontSize: 12, fontWeight: "700", color: COLORS.onSurface },
   cta: { backgroundColor: COLORS.brand, paddingVertical: SPACING.md, borderRadius: RADIUS.pill, alignItems: "center", marginTop: SPACING.md },
   ctaText: { color: COLORS.surface, fontWeight: "800", fontSize: 15 },
 });

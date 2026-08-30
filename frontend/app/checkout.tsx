@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowLeft, CalendarBlank, CheckCircle, Clock, CreditCard, Money, QrCode } from "phosphor-react-native";
 
 import { COLORS, RADIUS, SPACING } from "@/src/theme";
-import { api, CartItem, clearCart, getCart, getCustomer, saveCustomer, Settings } from "@/src/api";
+import { api, CartItem, clearCart, getCart, getCustomer, saveCustomer, Settings, StoreStatus } from "@/src/api";
 import { brl } from "@/src/format";
 import { computeFee, haversineKm } from "@/src/geo";
 import LocationPicker from "@/src/components/LocationPicker";
@@ -21,9 +21,11 @@ export default function Checkout() {
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [complement, setComplement] = useState("");
+  const [birthday, setBirthday] = useState(""); // MM-DD or empty
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [store, setStore] = useState<StoreStatus | null>(null);
   const [payment, setPayment] = useState<Payment>("pix");
   const [changeFor, setChangeFor] = useState("");
   const [coupon, setCoupon] = useState("");
@@ -41,10 +43,12 @@ export default function Checkout() {
   useFocusEffect(useCallback(() => {
     getCart().then(setItems);
     api.getSettings().then(setSettings).catch(() => {});
+    api.storeStatus().then((s) => { setStore(s); if (!s.is_open) setScheduleEnabled(true); }).catch(() => {});
     getCustomer().then((c: any) => {
       if (c) {
         setName(c.name || ""); setPhone(c.phone || ""); setAddress(c.address || "");
         setComplement(c.complement || "");
+        setBirthday(c.birthday || "");
         if (c.delivery_lat && c.delivery_lng) { setLat(c.delivery_lat); setLng(c.delivery_lng); }
       }
     });
@@ -71,9 +75,13 @@ export default function Checkout() {
     if (!name || !phone || !address) { setError("Preencha nome, telefone e endereço"); return; }
     if (!lat || !lng) { setError("Defina o local de entrega no mapa"); return; }
     if (outOfRange) { setError("Endereço fora da área de entrega"); return; }
+    if (store && !store.is_open && !scheduleEnabled) {
+      setError("Loja fechada — agende sua entrega para outro horário");
+      return;
+    }
     setSubmitting(true); setError("");
     try {
-      const cust = { name, phone, address, complement, delivery_lat: lat, delivery_lng: lng };
+      const cust = { name, phone, address, complement, delivery_lat: lat, delivery_lng: lng, birthday };
       await saveCustomer(cust);
       const order = await api.createOrder({
         customer: cust, items, payment_method: payment,
@@ -103,9 +111,23 @@ export default function Checkout() {
       </View>
 
       <ScrollView contentContainerStyle={{ padding: SPACING.lg, gap: SPACING.md, paddingBottom: 200 }} keyboardShouldPersistTaps="handled">
+        {store && !store.is_open && (
+          <View style={styles.closedBanner}>
+            <Text style={{ fontSize: 22 }}>🌙</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.closedTitle}>Loja fechada agora</Text>
+              <Text style={styles.closedSub}>Você precisa agendar sua entrega para um horário aberto ({store.open_time}–{store.close_time}).</Text>
+            </View>
+          </View>
+        )}
+
         <Section title="Seus dados">
           <Input testID="name-input" label="Nome completo" value={name} onChangeText={setName} />
-          <Input testID="phone-input" label="Telefone" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+          <Input testID="phone-input" label="Telefone (WhatsApp)" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+          <Input
+            testID="birthday-input" label="Aniversário — MM-DD (opcional, para cupom especial 🎂)"
+            value={birthday} onChangeText={setBirthday} placeholder="03-15" maxLength={5}
+          />
         </Section>
 
         <Section title="Endereço de entrega">
@@ -298,4 +320,7 @@ const styles = StyleSheet.create({
   footer: { position: "absolute", left: 0, right: 0, bottom: 0, backgroundColor: COLORS.surface, borderTopWidth: 1, borderTopColor: COLORS.border, padding: SPACING.lg },
   cta: { backgroundColor: COLORS.brand, paddingVertical: SPACING.md, borderRadius: RADIUS.pill, alignItems: "center" },
   ctaText: { color: COLORS.surface, fontSize: 15, fontWeight: "800" },
+  closedBanner: { flexDirection: "row", alignItems: "center", gap: SPACING.md, padding: SPACING.md, backgroundColor: "#FFF3D8", borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.warning },
+  closedTitle: { fontSize: 14, fontWeight: "800", color: COLORS.warning },
+  closedSub: { fontSize: 12, color: COLORS.warning, marginTop: 2 },
 });

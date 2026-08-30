@@ -28,6 +28,62 @@ STORAGE_URL = STORAGE_BASE.rstrip("/") + "/objstore/api/v1/storage"
 APP_NAME = "neia-salgados"
 _storage_key: Optional[str] = None
 
+# Twilio (opcional)
+TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID", "")
+TWILIO_API_KEY_SID = os.environ.get("TWILIO_API_KEY_SID", "")
+TWILIO_API_KEY_SECRET = os.environ.get("TWILIO_API_KEY_SECRET", "")
+TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN", "")
+TWILIO_WHATSAPP_FROM = os.environ.get("TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886")
+TWILIO_ORDER_TEMPLATE_SID = os.environ.get("TWILIO_ORDER_TEMPLATE_SID", "")
+TWILIO_BIRTHDAY_TEMPLATE_SID = os.environ.get("TWILIO_BIRTHDAY_TEMPLATE_SID", "")
+
+_twilio_client = None
+def twilio_ready() -> bool:
+    return bool((TWILIO_API_KEY_SID and TWILIO_API_KEY_SECRET and TWILIO_ACCOUNT_SID) or (TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN))
+
+
+def twilio_client():
+    global _twilio_client
+    if _twilio_client:
+        return _twilio_client
+    if not twilio_ready():
+        return None
+    from twilio.rest import Client
+    if TWILIO_API_KEY_SID and TWILIO_API_KEY_SECRET:
+        _twilio_client = Client(TWILIO_API_KEY_SID, TWILIO_API_KEY_SECRET, account_sid=TWILIO_ACCOUNT_SID)
+    else:
+        _twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+    return _twilio_client
+
+
+def _phone_to_whatsapp(phone: str) -> str:
+    import re
+    digits = re.sub(r"\D", "", phone)
+    if digits.startswith("0"):
+        digits = digits[1:]
+    if not digits.startswith("55"):
+        digits = "55" + digits
+    return f"whatsapp:+{digits}"
+
+
+def send_whatsapp(phone: str, body: Optional[str] = None, template_sid: Optional[str] = None, variables: Optional[dict] = None) -> dict:
+    client = twilio_client()
+    if not client:
+        return {"sent": False, "reason": "twilio_not_configured"}
+    try:
+        to = _phone_to_whatsapp(phone)
+        kwargs = {"from_": TWILIO_WHATSAPP_FROM, "to": to}
+        if template_sid:
+            import json as _j
+            kwargs["content_sid"] = template_sid
+            kwargs["content_variables"] = _j.dumps(variables or {}, ensure_ascii=False)
+        else:
+            kwargs["body"] = body or ""
+        msg = client.messages.create(**kwargs)
+        return {"sent": True, "sid": msg.sid, "status": msg.status}
+    except Exception as e:
+        return {"sent": False, "reason": str(e)}
+
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
 
@@ -67,10 +123,12 @@ class Customer(BaseModel):
     phone: str
     address: str
     complement: Optional[str] = ""
-    neighborhood_id: Optional[str] = None  # deprecated, kept for legacy
+    neighborhood_id: Optional[str] = None  # deprecated
     neighborhood_name: Optional[str] = None
     delivery_lat: Optional[float] = None
     delivery_lng: Optional[float] = None
+    birthday: Optional[str] = None  # "MM-DD" or "YYYY-MM-DD"
+    whatsapp_opt_in: Optional[bool] = True
 
 
 class Order(BaseModel):
@@ -140,12 +198,16 @@ class SettingsIn(BaseModel):
     store_lat: Optional[float] = None
     store_lng: Optional[float] = None
     store_address: Optional[str] = None
-    base_delivery_fee: Optional[float] = None  # até 3 km
-    per_km_fee: Optional[float] = None         # cada km adicional
+    base_delivery_fee: Optional[float] = None
+    per_km_fee: Optional[float] = None
     min_delivery_fee: Optional[float] = None
     max_delivery_km: Optional[float] = None
     auto_whatsapp: Optional[bool] = None
     admin_phone: Optional[str] = None
+    open_days: Optional[List[int]] = None   # 0=Sun..6=Sat
+    open_time: Optional[str] = None         # "HH:MM"
+    close_time: Optional[str] = None        # "HH:MM"
+    birthday_coupon_pct: Optional[int] = None
 
 
 class MotoboyLogin(BaseModel):
@@ -219,15 +281,39 @@ async def get_settings() -> dict:
         "store_address": "Av. Paulista, 1000 — São Paulo/SP",
         "store_lat": -23.5613,
         "store_lng": -46.6558,
-        "base_delivery_fee": 6.0,   # até 3 km
-        "per_km_fee": 2.0,          # cada km acima de 3
+        "base_delivery_fee": 6.0,
+        "per_km_fee": 2.0,
         "min_delivery_fee": 6.0,
         "max_delivery_km": 15.0,
         "auto_whatsapp": True,
         "admin_phone": "",
+        "open_days": [1, 2, 3, 4, 5, 6],  # Seg-Sáb
+        "open_time": "10:00",
+        "close_time": "20:00",
+        "birthday_coupon_pct": 20,
     }
     await db.settings.insert_one(default)
     return default
+
+
+def _parse_hm(s: str) -> tuple[int, int]:
+    hh, mm = s.split(":")
+    return int(hh), int(mm)
+
+
+def is_store_open(settings: dict, at: Optional[datetime] = None) -> bool:
+    at = at or datetime.now(timezone.utc) - timedelta(hours=3)  # America/Sao_Paulo aprox
+    weekday = (at.weekday() + 1) % 7  # Mon=0 → 1, Sun=6 → 0 (align 0=Sun..6=Sat)
+    open_days = settings.get("open_days") or [1, 2, 3, 4, 5, 6]
+    if weekday not in open_days:
+        return False
+    try:
+        oh, om = _parse_hm(settings.get("open_time", "10:00"))
+        ch, cm = _parse_hm(settings.get("close_time", "20:00"))
+    except Exception:
+        return True
+    minutes = at.hour * 60 + at.minute
+    return oh * 60 + om <= minutes < ch * 60 + cm
 
 
 def compute_delivery(distance_km: Optional[float], settings: dict) -> float:
@@ -410,6 +496,64 @@ async def list_neighborhoods():
     return docs
 
 
+# --- Store status
+@api_router.get("/store-status")
+async def store_status():
+    s = await get_settings()
+    now = datetime.now(timezone.utc) - timedelta(hours=3)
+    return {
+        "is_open": is_store_open(s, now),
+        "open_days": s.get("open_days", [1, 2, 3, 4, 5, 6]),
+        "open_time": s.get("open_time", "10:00"),
+        "close_time": s.get("close_time", "20:00"),
+    }
+
+
+# --- Birthday
+@api_router.get("/admin/birthdays/today")
+async def birthdays_today():
+    today = (datetime.now(timezone.utc) - timedelta(hours=3)).strftime("%m-%d")
+    docs = await db.customers.find({}, {"_id": 0}).to_list(500)
+    matches = []
+    for d in docs:
+        bd = d.get("birthday") or ""
+        if bd and bd[-5:] == today:
+            matches.append(d)
+    return {"date": today, "customers": matches}
+
+
+@api_router.post("/admin/birthdays/send")
+async def send_birthdays_today():
+    s = await get_settings()
+    pct = int(s.get("birthday_coupon_pct", 20))
+    today = (datetime.now(timezone.utc) - timedelta(hours=3)).strftime("%m-%d")
+    docs = await db.customers.find({}, {"_id": 0}).to_list(500)
+    sent = []
+    for d in docs:
+        bd = d.get("birthday") or ""
+        if not bd or bd[-5:] != today:
+            continue
+        if not d.get("whatsapp_opt_in", True):
+            continue
+        # Idempotência por dia/cliente
+        key = f"birthday:{d['phone']}:{today}"
+        already = await db.message_logs.find_one({"idempotency_key": key})
+        if already:
+            continue
+        msg = (
+            f"🎉 Feliz aniversário, {d['name']}! A Néia Salgados preparou um mimo pra você: "
+            f"cupom ANIVERSARIO{pct} com {pct}% de desconto hoje. Peça já pelo app 💛"
+        )
+        result = send_whatsapp(d["phone"], body=msg)
+        await db.message_logs.insert_one({
+            "id": str(uuid.uuid4()), "kind": "birthday", "phone": d["phone"],
+            "idempotency_key": key, "result": result,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        sent.append({"phone": d["phone"], "name": d["name"], "result": result})
+    return {"date": today, "sent": sent, "twilio_ready": twilio_ready()}
+
+
 # --- Settings (public + admin)
 @api_router.get("/settings")
 async def get_public_settings():
@@ -423,12 +567,18 @@ async def get_public_settings():
         "per_km_fee": s.get("per_km_fee"),
         "min_delivery_fee": s.get("min_delivery_fee"),
         "max_delivery_km": s.get("max_delivery_km"),
+        "open_days": s.get("open_days", [1, 2, 3, 4, 5, 6]),
+        "open_time": s.get("open_time", "10:00"),
+        "close_time": s.get("close_time", "20:00"),
+        "birthday_coupon_pct": s.get("birthday_coupon_pct", 20),
     }
 
 
 @api_router.get("/admin/settings")
 async def get_admin_settings():
-    return await get_settings()
+    s = await get_settings()
+    s["twilio_ready"] = twilio_ready()
+    return s
 
 
 @api_router.patch("/admin/settings")
@@ -510,6 +660,11 @@ async def create_order(payload: OrderCreate):
     subtotal = sum(i.subtotal for i in payload.items)
 
     settings = await get_settings()
+
+    # Working hours: allow only if store is open now OR if it's a scheduled order
+    if not payload.scheduled_for and not is_store_open(settings):
+        raise HTTPException(400, "Loja fechada agora. Agende sua entrega ou tente no próximo horário.")
+
     distance_km: Optional[float] = None
     if payload.customer.delivery_lat is not None and payload.customer.delivery_lng is not None:
         distance_km = round(
@@ -531,11 +686,26 @@ async def create_order(payload: OrderCreate):
             payload.customer.neighborhood_name = n["name"]
 
     discount = 0.0
+    applied_coupon = None
+    # Birthday auto-coupon (only if no other coupon and phone has birthday matching today)
+    if not payload.coupon_code and payload.customer.birthday:
+        try:
+            bd = payload.customer.birthday
+            mmdd = bd[-5:] if len(bd) >= 5 else ""  # MM-DD
+            today_mmdd = (datetime.now(timezone.utc) - timedelta(hours=3)).strftime("%m-%d")
+            if mmdd == today_mmdd:
+                pct = int(settings.get("birthday_coupon_pct", 20))
+                discount = round(subtotal * (pct / 100), 2)
+                applied_coupon = f"ANIVERSARIO{pct}"
+        except Exception:
+            pass
+
     if payload.coupon_code:
         c = await db.coupons.find_one({"code": payload.coupon_code.upper(), "active": True}, {"_id": 0})
         if not c:
             raise HTTPException(400, "Cupom inválido")
         discount = round(subtotal * (c["discount_percent"] / 100), 2)
+        applied_coupon = payload.coupon_code.upper()
 
     total = round(subtotal + delivery_fee - discount, 2)
 
@@ -549,11 +719,28 @@ async def create_order(payload: OrderCreate):
         total=total,
         payment_method=payload.payment_method,
         change_for=payload.change_for,
-        coupon_code=payload.coupon_code.upper() if payload.coupon_code else None,
+        coupon_code=applied_coupon,
         notes=payload.notes,
         scheduled_for=payload.scheduled_for,
     )
     await db.orders.insert_one(order.model_dump())
+
+    # Upsert customer profile
+    await db.customers.update_one(
+        {"phone": payload.customer.phone},
+        {"$set": {
+            "phone": payload.customer.phone,
+            "name": payload.customer.name,
+            "birthday": payload.customer.birthday,
+            "whatsapp_opt_in": bool(payload.customer.whatsapp_opt_in),
+            "last_address": payload.customer.address,
+            "last_lat": payload.customer.delivery_lat,
+            "last_lng": payload.customer.delivery_lng,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+        upsert=True,
+    )
+
     return order.model_dump()
 
 
@@ -670,7 +857,29 @@ async def admin_update_status(order_id: str, body: StatusUpdate):
     r = await db.orders.update_one({"id": order_id}, {"$set": updates})
     if r.matched_count == 0:
         raise HTTPException(404, "Pedido não encontrado")
-    return {"ok": True}
+
+    # Auto-notificar via WhatsApp (Twilio) se configurado e habilitado
+    settings = await get_settings()
+    notify_result: dict = {"sent": False, "reason": "auto_disabled"}
+    if settings.get("auto_whatsapp") and twilio_ready():
+        order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+        if order and order["customer"].get("whatsapp_opt_in", True):
+            labels = {"recebido": "🥟 recebido", "fritando": "🔥 em preparo",
+                      "saiu_entrega": "🛵 saiu para entrega", "entregue": "✅ entregue",
+                      "cancelado": "❌ cancelado"}
+            label = labels.get(body.status, body.status)
+            msg = (
+                f"Olá {order['customer']['name']}! Seu pedido *#{order['short_code']}* na Néia Salgados "
+                f"está {label}."
+            )
+            r2 = send_whatsapp(order["customer"]["phone"], body=msg)
+            notify_result = r2
+            await db.message_logs.insert_one({
+                "id": str(uuid.uuid4()), "kind": "status", "order_id": order_id,
+                "phone": order["customer"]["phone"], "status": body.status,
+                "result": r2, "created_at": now,
+            })
+    return {"ok": True, "notification": notify_result}
 
 
 @api_router.post("/admin/orders/{order_id}/assign")

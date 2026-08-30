@@ -52,7 +52,12 @@ export type Settings = {
   base_delivery_fee: number; per_km_fee: number;
   min_delivery_fee: number; max_delivery_km: number;
   auto_whatsapp?: boolean; admin_phone?: string;
+  open_days: number[]; open_time: string; close_time: string;
+  birthday_coupon_pct: number;
+  twilio_ready?: boolean;
 };
+export type StoreStatus = { is_open: boolean; open_days: number[]; open_time: string; close_time: string };
+export type BirthdayCustomer = { phone: string; name: string; birthday: string; whatsapp_opt_in?: boolean };
 export type RankingItem = {
   motoboy_id: string; name: string; phone: string;
   deliveries: number; avg_minutes: number | null; revenue: number;
@@ -138,6 +143,9 @@ export const api = {
     req<Settings>("/admin/settings", { method: "PATCH", body: JSON.stringify(body) }),
   adminMotoboysRanking: (date?: string) =>
     req<{ date: string; ranking: RankingItem[] }>(`/admin/motoboys/ranking${date ? `?date=${date}` : ""}`),
+  storeStatus: () => req<StoreStatus>("/store-status"),
+  adminBirthdaysToday: () => req<{ date: string; customers: BirthdayCustomer[] }>("/admin/birthdays/today"),
+  adminSendBirthdays: () => req<{ date: string; sent: any[]; twilio_ready: boolean }>("/admin/birthdays/send", { method: "POST" }),
   async adminUploadImage(uri: string, name: string, type: string): Promise<{ path: string; url: string }> {
     const form = new FormData();
     if (Platform.OS === "web") {

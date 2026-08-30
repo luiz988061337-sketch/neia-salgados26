@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ArrowRight, Fire, ShoppingBag, Storefront } from "phosphor-react-native";
 
 import { COLORS, RADIUS, SPACING } from "@/src/theme";
-import { api, fileUrl, getCart, Product, Theme } from "@/src/api";
+import { api, fileUrl, getCart, Product, StoreStatus, Theme } from "@/src/api";
 import { brl } from "@/src/format";
 
 export default function Home() {
@@ -16,10 +16,12 @@ export default function Home() {
   const [products, setProducts] = useState<Product[]>([]);
   const [cartCount, setCartCount] = useState(0);
   const [themes, setThemes] = useState<Theme[]>([]);
+  const [store, setStore] = useState<StoreStatus | null>(null);
 
   useEffect(() => {
     api.listProducts().then(setProducts).catch(() => {});
     api.listActiveThemes().then(setThemes).catch(() => {});
+    api.storeStatus().then(setStore).catch(() => {});
     getCart().then((c) => setCartCount(c.reduce((s, i) => s + i.quantity, 0)));
   }, []);
 
@@ -43,6 +45,16 @@ export default function Home() {
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+        {store && !store.is_open && (
+          <View style={styles.closedBanner}>
+            <Text style={styles.closedEmoji}>🌙</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.closedTitle}>Loja fechada agora</Text>
+              <Text style={styles.closedSub}>Funcionamento: {store.open_time} – {store.close_time}. Você pode agendar sua entrega no checkout.</Text>
+            </View>
+          </View>
+        )}
+
         {themes.length > 0 && (
           <View style={styles.themeBanners}>
             {themes.map((t) => (
@@ -216,4 +228,8 @@ const styles = StyleSheet.create({
   themeEmoji: { fontSize: 26 },
   themeLabel: { fontSize: 15, fontWeight: "800", color: COLORS.onBrandTertiary },
   themeSub: { fontSize: 12, color: COLORS.onBrandTertiary, marginTop: 2 },
+  closedBanner: { flexDirection: "row", alignItems: "center", gap: SPACING.md, padding: SPACING.md, marginHorizontal: SPACING.lg, marginTop: SPACING.sm, backgroundColor: "#FFF3D8", borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.warning },
+  closedEmoji: { fontSize: 26 },
+  closedTitle: { fontSize: 14, fontWeight: "800", color: COLORS.warning },
+  closedSub: { fontSize: 12, color: COLORS.warning, marginTop: 2 },
 });
