@@ -2,12 +2,13 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft, ChatCircleText, CheckCircle, Fire, House, Motorcycle, Phone, Receipt } from "phosphor-react-native";
+import { ArrowLeft, ChatCircle, ChatCircleText, CheckCircle, Fire, House, Motorcycle, Phone, Receipt } from "phosphor-react-native";
 
 import { COLORS, RADIUS, SPACING } from "@/src/theme";
 import { api, Order } from "@/src/api";
 import { brl, statusLabel, timeAgo } from "@/src/format";
 import MotoboyMap from "@/src/components/MotoboyMap";
+import ChatSheet from "@/src/components/ChatSheet";
 import { openWhatsApp, orderStatusMessage } from "@/src/whatsapp";
 
 const STEPS: { key: Order["status"]; label: string; icon: any }[] = [
@@ -22,6 +23,7 @@ export default function OrderTracking() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [order, setOrder] = useState<Order | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
   const pollRef = useRef<any>(null);
 
   const fetchOrder = async () => {
@@ -115,6 +117,9 @@ export default function OrderTracking() {
                 <Text style={styles.motoName}>{order.motoboy_location!.name}</Text>
                 <Text style={styles.motoPhone}>{order.motoboy_location!.phone}</Text>
               </View>
+              <Pressable testID="chat-motoboy" onPress={() => setChatOpen(true)} style={styles.chatBtn}>
+                <ChatCircle color={COLORS.surface} size={16} weight="fill" />
+              </Pressable>
               <Pressable style={styles.callBtn}>
                 <Phone color={COLORS.surface} size={16} weight="bold" />
               </Pressable>
@@ -146,6 +151,16 @@ export default function OrderTracking() {
           <Text style={styles.addrText}>{order.customer.address}{order.customer.complement ? ` • ${order.customer.complement}` : ""}</Text>
         </View>
       </ScrollView>
+
+      {chatOpen && order.motoboy_name && (
+        <ChatSheet
+          orderId={order.id}
+          role="customer"
+          title={`Chat com ${order.motoboy_name}`}
+          subtitle={`Pedido #${order.short_code}`}
+          onClose={() => setChatOpen(false)}
+        />
+      )}
     </View>
   );
 }
@@ -181,6 +196,7 @@ const styles = StyleSheet.create({
   motoName: { fontSize: 14, fontWeight: "800", color: COLORS.onSurface },
   motoPhone: { fontSize: 12, color: COLORS.muted },
   callBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.success, alignItems: "center", justifyContent: "center" },
+  chatBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.brand, alignItems: "center", justifyContent: "center" },
   webMapFallback: { margin: SPACING.lg, padding: SPACING.xl, alignItems: "center", gap: SPACING.sm, backgroundColor: COLORS.brandTertiary, borderRadius: RADIUS.md },
   webMapText: { fontSize: 15, fontWeight: "800", color: COLORS.onBrandTertiary },
   webMapSub: { fontSize: 12, color: COLORS.onBrandTertiary },

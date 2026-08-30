@@ -204,10 +204,17 @@ class SettingsIn(BaseModel):
     max_delivery_km: Optional[float] = None
     auto_whatsapp: Optional[bool] = None
     admin_phone: Optional[str] = None
-    open_days: Optional[List[int]] = None   # 0=Sun..6=Sat
-    open_time: Optional[str] = None         # "HH:MM"
-    close_time: Optional[str] = None        # "HH:MM"
+    open_days: Optional[List[int]] = None
+    open_time: Optional[str] = None
+    close_time: Optional[str] = None
     birthday_coupon_pct: Optional[int] = None
+    bulk_tiers: Optional[List[dict]] = None  # [{min_qty:int, discount_pct:int, label:str}]
+
+
+class ChatMessageIn(BaseModel):
+    order_id: str
+    from_role: Literal["customer", "motoboy"]
+    text: str
 
 
 class MotoboyLogin(BaseModel):
@@ -287,10 +294,16 @@ async def get_settings() -> dict:
         "max_delivery_km": 15.0,
         "auto_whatsapp": True,
         "admin_phone": "",
-        "open_days": [1, 2, 3, 4, 5, 6],  # Seg-Sáb
+        "open_days": [1, 2, 3, 4, 5, 6],
         "open_time": "10:00",
         "close_time": "20:00",
         "birthday_coupon_pct": 20,
+        "bulk_tiers": [
+            {"min_qty": 100, "discount_pct": 5, "label": "Encomenda"},
+            {"min_qty": 200, "discount_pct": 8, "label": "Encomenda Grande"},
+            {"min_qty": 500, "discount_pct": 12, "label": "Encomenda em Massa"},
+            {"min_qty": 1000, "discount_pct": 18, "label": "Encomenda Master"},
+        ],
     }
     await db.settings.insert_one(default)
     return default
@@ -506,7 +519,64 @@ async def store_status():
         "open_days": s.get("open_days", [1, 2, 3, 4, 5, 6]),
         "open_time": s.get("open_time", "10:00"),
         "close_time": s.get("close_time", "20:00"),
+        "bulk_tiers": s.get("bulk_tiers", []),
     }
+
+
+# --- Chat between customer and motoboy per order
+@api_router.get("/orders/{order_id}/messages")
+async def list_messages(order_id: str, since: Optional[str] = None):
+    q: dict = {"order_id": order_id}
+    if since:
+        q["created_at"] = {"$gt": since}
+    docs = await db.chat_messages.find(q, {"_id": 0}).sort("created_at", 1).to_list(500)
+    return docs
+
+
+@api_router.post("/orders/{order_id}/messages")
+async def post_message(order_id: str, body: ChatMessageIn):
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(404, "Pedido não encontrado")
+    text = (body.text or "").strip()
+    if not text:
+        raise HTTPException(400, "Mensagem vazia")
+    msg = {
+        "id": str(uuid.uuid4()), "order_id": order_id,
+        "from_role": body.from_role, "text": text[:800],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.chat_messages.insert_one(msg)
+    msg.pop("_id", None)
+    return msg
+
+
+# --- Customer ranking (VIPs)
+@api_router.get("/admin/customers/ranking")
+async def customers_ranking():
+    pipeline = [
+        {"$group": {
+            "_id": "$customer.phone",
+            "name": {"$last": "$customer.name"},
+            "orders_count": {"$sum": 1},
+            "total_spent": {"$sum": "$total"},
+            "last_order_at": {"$max": "$created_at"},
+            "birthday": {"$last": "$customer.birthday"},
+        }},
+        {"$sort": {"total_spent": -1, "orders_count": -1}},
+        {"$limit": 100},
+    ]
+    docs = await db.orders.aggregate(pipeline).to_list(100)
+    ranking = []
+    for d in docs:
+        ranking.append({
+            "phone": d["_id"], "name": d.get("name") or "-",
+            "orders_count": int(d.get("orders_count", 0)),
+            "total_spent": round(float(d.get("total_spent", 0)), 2),
+            "last_order_at": d.get("last_order_at"),
+            "birthday": d.get("birthday"),
+        })
+    return {"ranking": ranking}
 
 
 # --- Birthday
@@ -571,6 +641,7 @@ async def get_public_settings():
         "open_time": s.get("open_time", "10:00"),
         "close_time": s.get("close_time", "20:00"),
         "birthday_coupon_pct": s.get("birthday_coupon_pct", 20),
+        "bulk_tiers": s.get("bulk_tiers", []),
     }
 
 
@@ -700,12 +771,29 @@ async def create_order(payload: OrderCreate):
         except Exception:
             pass
 
+    # Bulk order discount (progressive) — quantity of combo/frito items only
+    bulk_qty = sum(i.quantity for i in payload.items if i.category in ("combo", "frito"))
+    bulk_pct = 0
+    bulk_label = None
+    for tier in sorted(settings.get("bulk_tiers", []), key=lambda t: t["min_qty"]):
+        if bulk_qty >= tier["min_qty"]:
+            bulk_pct = int(tier["discount_pct"])
+            bulk_label = tier.get("label")
+    if bulk_pct > 0 and (not applied_coupon or applied_coupon.startswith("ANIVERSARIO") is False):
+        # Prefer the greater of bulk vs coupon; keep coupon description if it wins
+        bulk_disc = round(subtotal * (bulk_pct / 100), 2)
+        if bulk_disc > discount:
+            discount = bulk_disc
+            applied_coupon = f"LOTE{bulk_pct}"
+
     if payload.coupon_code:
         c = await db.coupons.find_one({"code": payload.coupon_code.upper(), "active": True}, {"_id": 0})
         if not c:
             raise HTTPException(400, "Cupom inválido")
-        discount = round(subtotal * (c["discount_percent"] / 100), 2)
-        applied_coupon = payload.coupon_code.upper()
+        code_disc = round(subtotal * (c["discount_percent"] / 100), 2)
+        if code_disc > discount:
+            discount = code_disc
+            applied_coupon = payload.coupon_code.upper()
 
     total = round(subtotal + delivery_fee - discount, 2)
 

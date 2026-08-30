@@ -56,12 +56,19 @@ export type Settings = {
   birthday_coupon_pct: number;
   twilio_ready?: boolean;
 };
-export type StoreStatus = { is_open: boolean; open_days: number[]; open_time: string; close_time: string };
+export type StoreStatus = { is_open: boolean; open_days: number[]; open_time: string; close_time: string; bulk_tiers?: BulkTier[] };
 export type BirthdayCustomer = { phone: string; name: string; birthday: string; whatsapp_opt_in?: boolean };
 export type RankingItem = {
   motoboy_id: string; name: string; phone: string;
   deliveries: number; avg_minutes: number | null; revenue: number;
 };
+
+export type BulkTier = { min_qty: number; discount_pct: number; label: string };
+export type CustomerVip = {
+  phone: string; name: string; orders_count: number; total_spent: number;
+  last_order_at?: string; birthday?: string | null;
+};
+export type ChatMessage = { id: string; order_id: string; from_role: "customer" | "motoboy"; text: string; created_at: string };
 
 export type Order = {
   id: string;
@@ -146,6 +153,14 @@ export const api = {
   storeStatus: () => req<StoreStatus>("/store-status"),
   adminBirthdaysToday: () => req<{ date: string; customers: BirthdayCustomer[] }>("/admin/birthdays/today"),
   adminSendBirthdays: () => req<{ date: string; sent: any[]; twilio_ready: boolean }>("/admin/birthdays/send", { method: "POST" }),
+  adminCustomersRanking: () => req<{ ranking: CustomerVip[] }>("/admin/customers/ranking"),
+  listMessages: (orderId: string, since?: string) =>
+    req<ChatMessage[]>(`/orders/${orderId}/messages${since ? `?since=${encodeURIComponent(since)}` : ""}`),
+  sendMessage: (orderId: string, from_role: "customer" | "motoboy", text: string) =>
+    req<ChatMessage>(`/orders/${orderId}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ order_id: orderId, from_role, text }),
+    }),
   async adminUploadImage(uri: string, name: string, type: string): Promise<{ path: string; url: string }> {
     const form = new FormData();
     if (Platform.OS === "web") {

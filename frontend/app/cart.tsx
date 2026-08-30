@@ -3,21 +3,28 @@ import { useCallback, useState } from "react";
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft, Trash, ShoppingBagOpen } from "phosphor-react-native";
+import { ArrowLeft, Trash, ShoppingBagOpen, Sparkle } from "phosphor-react-native";
 
 import { COLORS, RADIUS, SPACING } from "@/src/theme";
-import { CartItem, fileUrl, getCart, saveCart } from "@/src/api";
+import { api, BulkTier, CartItem, fileUrl, getCart, saveCart } from "@/src/api";
 import { brl } from "@/src/format";
 
 export default function Cart() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [items, setItems] = useState<CartItem[]>([]);
+  const [tiers, setTiers] = useState<BulkTier[]>([]);
 
-  useFocusEffect(useCallback(() => { getCart().then(setItems); }, []));
+  useFocusEffect(useCallback(() => {
+    getCart().then(setItems);
+    api.storeStatus().then((s) => setTiers(s.bulk_tiers || [])).catch(() => {});
+  }, []));
 
   const subtotal = items.reduce((s, i) => s + i.subtotal, 0);
   const deliveryFee = items.length ? 8.0 : 0;
+  const bulkQty = items.filter((i) => i.category !== "congelado").reduce((s, i) => s + i.quantity, 0);
+  const activeTier = [...tiers].sort((a, b) => a.min_qty - b.min_qty).reduce<BulkTier | null>((acc, t) => (bulkQty >= t.min_qty ? t : acc), null);
+  const nextTier = [...tiers].sort((a, b) => a.min_qty - b.min_qty).find((t) => bulkQty < t.min_qty);
 
   const remove = async (idx: number) => {
     const next = items.filter((_, i) => i !== idx);
@@ -39,6 +46,29 @@ export default function Cart() {
         data={items}
         keyExtractor={(_, idx) => String(idx)}
         contentContainerStyle={{ padding: SPACING.lg, gap: SPACING.md, paddingBottom: 200 }}
+        ListHeaderComponent={
+          items.length > 0 && tiers.length > 0 ? (
+            <View style={styles.bulkBox}>
+              <Sparkle color={COLORS.brand} size={20} weight="fill" />
+              <View style={{ flex: 1 }}>
+                {activeTier ? (
+                  <>
+                    <Text style={styles.bulkTitle}>🎉 {activeTier.label} ativa — {activeTier.discount_pct}% off</Text>
+                    {nextTier ? (
+                      <Text style={styles.bulkSub}>Faltam {nextTier.min_qty - bulkQty} salgados para "{nextTier.label}" ({nextTier.discount_pct}% off)</Text>
+                    ) : (
+                      <Text style={styles.bulkSub}>Você chegou ao maior desconto!</Text>
+                    )}
+                  </>
+                ) : (
+                  <Text style={styles.bulkTitle}>
+                    Adicione mais {(nextTier?.min_qty ?? 0) - bulkQty} salgados para {nextTier?.discount_pct}% off ({nextTier?.label})
+                  </Text>
+                )}
+              </View>
+            </View>
+          ) : null
+        }
         ListEmptyComponent={
           <View style={styles.empty}>
             <ShoppingBagOpen color={COLORS.muted} size={56} weight="light" />
@@ -118,4 +148,7 @@ const styles = StyleSheet.create({
   totalVal: { fontSize: 20, fontWeight: "800", color: COLORS.brand },
   cta: { backgroundColor: COLORS.brand, paddingVertical: SPACING.md, borderRadius: RADIUS.pill, alignItems: "center", marginTop: SPACING.sm },
   ctaText: { color: COLORS.surface, fontSize: 15, fontWeight: "800" },
+  bulkBox: { flexDirection: "row", gap: SPACING.md, alignItems: "center", padding: SPACING.md, backgroundColor: COLORS.brandTertiary, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.brand },
+  bulkTitle: { fontSize: 13, fontWeight: "800", color: COLORS.onBrandTertiary },
+  bulkSub: { fontSize: 11, color: COLORS.onBrandTertiary, marginTop: 2 },
 });

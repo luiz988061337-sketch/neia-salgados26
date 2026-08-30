@@ -3,12 +3,13 @@ import { useEffect, useRef, useState } from "react";
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Location from "expo-location";
-import { ArrowLeft, MapPin, Motorcycle, SignOut } from "phosphor-react-native";
+import { ArrowLeft, ChatCircle, MapPin, Motorcycle, SignOut } from "phosphor-react-native";
 
 import { COLORS, RADIUS, SPACING } from "@/src/theme";
 import { api, Order } from "@/src/api";
 import { brl } from "@/src/format";
 import { storage } from "@/src/utils/storage";
+import ChatSheet from "@/src/components/ChatSheet";
 
 export default function MotoboyScreen() {
   const insets = useSafeAreaInsets();
@@ -18,6 +19,7 @@ export default function MotoboyScreen() {
   const [tracking, setTracking] = useState(false);
   const [lastPing, setLastPing] = useState<string | null>(null);
   const [error, setError] = useState<string>("");
+  const [chatOrder, setChatOrder] = useState<Order | null>(null);
   const timerRef = useRef<any>(null);
 
   const load = async (mid: string) => {
@@ -133,19 +135,34 @@ export default function MotoboyScreen() {
             <Text style={styles.customer}>{item.customer.name} • {item.customer.phone}</Text>
             <Text style={styles.address} numberOfLines={2}>{item.customer.address}</Text>
             <Text style={styles.total}>{brl(item.total)} • {item.payment_method.toUpperCase()}</Text>
-            {item.status !== "saiu_entrega" ? (
-              <Pressable testID={`start-${item.id}`} onPress={() => startDelivery(item.id)} style={styles.cta}>
-                <Motorcycle color={COLORS.surface} size={16} weight="fill" />
-                <Text style={styles.ctaText}>Iniciar entrega</Text>
+            <View style={styles.rowBtns}>
+              {item.status !== "saiu_entrega" ? (
+                <Pressable testID={`start-${item.id}`} onPress={() => startDelivery(item.id)} style={styles.cta}>
+                  <Motorcycle color={COLORS.surface} size={16} weight="fill" />
+                  <Text style={styles.ctaText}>Iniciar entrega</Text>
+                </Pressable>
+              ) : (
+                <Pressable testID={`complete-${item.id}`} onPress={() => complete(item.id)} style={styles.ctaSuccess}>
+                  <Text style={styles.ctaText}>Marcar como entregue</Text>
+                </Pressable>
+              )}
+              <Pressable testID={`chat-${item.id}`} onPress={() => setChatOrder(item)} style={styles.chatBtn}>
+                <ChatCircle color={COLORS.surface} size={18} weight="fill" />
               </Pressable>
-            ) : (
-              <Pressable testID={`complete-${item.id}`} onPress={() => complete(item.id)} style={styles.ctaSuccess}>
-                <Text style={styles.ctaText}>Marcar como entregue</Text>
-              </Pressable>
-            )}
+            </View>
           </View>
         )}
       />
+
+      {chatOrder && (
+        <ChatSheet
+          orderId={chatOrder.id}
+          role="motoboy"
+          title={`Chat com ${chatOrder.customer.name}`}
+          subtitle={`Pedido #${chatOrder.short_code}`}
+          onClose={() => setChatOrder(null)}
+        />
+      )}
     </View>
   );
 }
@@ -174,7 +191,9 @@ const styles = StyleSheet.create({
   customer: { fontSize: 13, fontWeight: "700", color: COLORS.onSurface },
   address: { fontSize: 12, color: COLORS.muted },
   total: { fontSize: 13, fontWeight: "800", color: COLORS.brand, marginTop: 4 },
-  cta: { flexDirection: "row", gap: 6, backgroundColor: COLORS.brand, alignItems: "center", justifyContent: "center", paddingVertical: SPACING.sm, borderRadius: RADIUS.pill, marginTop: SPACING.sm },
-  ctaSuccess: { backgroundColor: COLORS.success, alignItems: "center", justifyContent: "center", paddingVertical: SPACING.sm, borderRadius: RADIUS.pill, marginTop: SPACING.sm },
+  cta: { flex: 1, flexDirection: "row", gap: 6, backgroundColor: COLORS.brand, alignItems: "center", justifyContent: "center", paddingVertical: SPACING.sm, borderRadius: RADIUS.pill },
+  ctaSuccess: { flex: 1, backgroundColor: COLORS.success, alignItems: "center", justifyContent: "center", paddingVertical: SPACING.sm, borderRadius: RADIUS.pill },
   ctaText: { color: COLORS.surface, fontWeight: "800", fontSize: 13 },
+  rowBtns: { flexDirection: "row", gap: SPACING.sm, marginTop: SPACING.sm, alignItems: "center" },
+  chatBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.info, alignItems: "center", justifyContent: "center" },
 });
