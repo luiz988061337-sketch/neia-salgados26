@@ -1,6 +1,57 @@
 # Néia Salgados — PRD
 
-## Última entrega — Fidelidade, Cupons Avançados, Compartilhamento, Bebidas & Avaliação
+## Última entrega — Agendamento estendido
+
+### Agendamento até 15 dias
+- Cliente pode agendar entrega em qualquer dia até 15 dias no futuro (antes era ilimitado)
+- `DateTimePicker` no checkout usa `maximumDate = hoje + 15 dias`
+- Backend valida no `POST /orders`: bloqueia se `scheduled_for > agora + 15 dias` ou `< agora`
+- Mensagem no checkout: "Toque para agendar até 15 dias no futuro"
+
+## Entrega anterior — Motoboys, Financeiro, Fidelidade editável & Branding
+
+### 1. Cadastro de Motoboys (Admin)
+- Nova tela `/staff/motoboys-admin` com listagem, criação, edição e desativação.
+- Endpoints: `GET /api/admin/motoboys/all`, `POST/PATCH/DELETE /api/admin/motoboys[/{id}]`.
+- Valida telefone duplicado, senha obrigatória apenas na criação, toggle ativo/inativo.
+- Motoboy inativo não consegue login.
+
+### 2. Financeiro Motoboys (soma de taxa)
+- Renomeada "Ranking" → **Financeiro Motoboys** (`/staff/ranking`).
+- Tabs de período: Hoje / 7 dias / 30 dias.
+- 3 KPIs: entregas, **taxa de entrega total** (destaque verde), faturado.
+- Cada motoboy mostra soma de taxa de entrega, entregas, tempo médio.
+- Endpoint `GET /admin/motoboys/ranking?period=today|week|month` retorna `delivery_fees_total` + `totals`.
+
+### 3. Plano de Fidelidade editável
+- Nova tela `/staff/loyalty` — Admin edita: ativar/desativar, pontos por R$1, tabela dinâmica de níveis (pontos → % off).
+- Backend persiste em `settings`: `loyalty_active`, `loyalty_points_per_real`, `loyalty_tiers[]`.
+- Perfil do cliente usa a tabela dinâmica (mostra progresso até o próximo nível).
+- Ao entregar, sistema concede pontos usando o ratio configurado.
+- Resgate valida se o valor de pontos está entre os tiers cadastrados.
+
+### 4. Novo subtítulo da marca
+- Home: **"O sabor que faz a diferença"** em itálico laranja abaixo de "Néia Salgados".
+- Perfil: card da marca atualizado para o mesmo lema.
+
+## Entrega anterior — Fidelidade, Cupons Avançados, Compartilhamento, Bebidas & Avaliação
+
+### 1. Programa de Fidelidade (pontos)
+- Cliente ganha pontos ao pedido ser entregue; cartão no Perfil com resgate por tiers.
+- Endpoint: `POST /api/customers/{phone}/redeem-points`.
+
+### 2. Cupons Promocionais Avançados
+- Painel Admin **Cupons Promocionais** (`/staff/coupons`) com CRUD completo.
+- Suporte a `first_order_only`, `max_uses`, `expires_at`.
+- BEMVINDO auto-aplicado na 1ª compra.
+
+### 3. Compartilhamento & Avaliação
+- Tracking: WhatsApp + Share nativo + Copiar link.
+- Avaliação com 5 estrelas quando entregue.
+
+### 4. Bebidas
+- Categoria `bebida` com `unit_size: 1` (Coca 2L, Guaraná 2L, etc).
+- "Monte seu combo frito" → "Monte seu Combo".
 
 ### 1. Programa de Fidelidade (pontos)
 - Cliente ganha **1 ponto por R$1 gasto** ao pedido ser marcado como *entregue* (automático).

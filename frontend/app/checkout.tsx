@@ -168,7 +168,7 @@ export default function Checkout() {
                 {scheduleEnabled ? "Entrega agendada" : "Entregar assim que pronto"}
               </Text>
               <Text style={styles.toggleSub}>
-                {scheduleEnabled ? "Escolha o dia e horário abaixo" : "Toque para agendar para depois"}
+                {scheduleEnabled ? "Escolha o dia e horário abaixo (até 15 dias no futuro)" : "Toque para agendar até 15 dias no futuro"}
               </Text>
             </View>
             <View style={[styles.switch, scheduleEnabled && styles.switchOn]}>
@@ -193,6 +193,7 @@ export default function Checkout() {
             <DateTimePicker
               value={scheduled} mode="date" display="default"
               minimumDate={new Date()}
+              maximumDate={new Date(Date.now() + 15 * 24 * 60 * 60 * 1000)}
               onChange={(_, d) => { setShowDate(false); if (d) { const n = new Date(scheduled); n.setFullYear(d.getFullYear(), d.getMonth(), d.getDate()); setScheduled(n); } }}
             />
           )}

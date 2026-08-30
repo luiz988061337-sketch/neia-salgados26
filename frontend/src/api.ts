@@ -57,13 +57,19 @@ export type Settings = {
   open_days: number[]; open_time: string; close_time: string;
   birthday_coupon_pct: number;
   twilio_ready?: boolean;
+  loyalty_active?: boolean;
+  loyalty_points_per_real?: number;
+  loyalty_tiers?: LoyaltyTier[];
 };
 export type StoreStatus = { is_open: boolean; open_days: number[]; open_time: string; close_time: string; bulk_tiers?: BulkTier[] };
 export type BirthdayCustomer = { phone: string; name: string; birthday: string; whatsapp_opt_in?: boolean };
 export type RankingItem = {
   motoboy_id: string; name: string; phone: string;
   deliveries: number; avg_minutes: number | null; revenue: number;
+  delivery_fees_total?: number;
 };
+export type RankingTotals = { deliveries: number; delivery_fees_total: number; revenue: number };
+export type LoyaltyTier = { points: number; discount_pct: number };
 
 export type BulkTier = { min_qty: number; discount_pct: number; label: string };
 export type CustomerVip = {
@@ -102,10 +108,11 @@ export type Order = {
   delivered_at?: string | null;
   created_at: string;
   updated_at: string;
-  motoboy_location?: { lat: number; lng: number; last_ping: string; name: string; phone: string } | null;
+  motoboy_location?: { lat: number; lng: number; last_ping: string; name: string; phone: string; photo_url?: string } | null;
 };
 
-export type Motoboy = { id: string; name: string; phone: string; photo_url?: string; current_lat?: number; current_lng?: number };
+export type Motoboy = { id: string; name: string; phone: string; photo_url?: string; current_lat?: number; current_lng?: number; commission_pct?: number };
+export type TopCustomer = { phone: string; name: string; orders_count: number; total_spent: number };
 
 export function fileUrl(pathOrUrl: string) {
   if (!pathOrUrl) return "";
@@ -140,6 +147,15 @@ export const api = {
   adminAssign: (id: string, motoboy_id: string) =>
     req(`/admin/orders/${id}/assign`, { method: "POST", body: JSON.stringify({ motoboy_id }) }),
   adminMotoboys: () => req<Motoboy[]>("/admin/motoboys"),
+  adminAllMotoboys: () => req<any[]>("/admin/motoboys/all"),
+  adminCreateMotoboy: (body: { name: string; phone: string; password: string; photo_url?: string; active?: boolean; commission_pct?: number }) =>
+    req<any>("/admin/motoboys", { method: "POST", body: JSON.stringify(body) }),
+  customerOfMonth: () =>
+    req<{ month: string; customer: TopCustomer | null; coupon: { code: string; discount_percent: number } | null }>("/customers/top-of-month"),
+  adminUpdateMotoboy: (id: string, body: any) =>
+    req(`/admin/motoboys/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  adminDeleteMotoboy: (id: string) =>
+    req(`/admin/motoboys/${id}`, { method: "DELETE" }),
   adminProducts: () => req<Product[]>("/admin/products"),
   adminUpdateProduct: (id: string, body: Partial<Product>) =>
     req(`/admin/products/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
@@ -161,8 +177,10 @@ export const api = {
   adminGetSettings: () => req<Settings>("/admin/settings"),
   adminUpdateSettings: (body: Partial<Settings>) =>
     req<Settings>("/admin/settings", { method: "PATCH", body: JSON.stringify(body) }),
-  adminMotoboysRanking: (date?: string) =>
-    req<{ date: string; ranking: RankingItem[] }>(`/admin/motoboys/ranking${date ? `?date=${date}` : ""}`),
+  adminMotoboysRanking: (opts?: { date?: string; period?: "today" | "week" | "month" }) =>
+    req<{ date: string; period: string; ranking: RankingItem[]; totals: RankingTotals }>(
+      `/admin/motoboys/ranking?${opts?.date ? `date=${opts.date}` : `period=${opts?.period || "today"}`}`
+    ),
   storeStatus: () => req<StoreStatus>("/store-status"),
   adminBirthdaysToday: () => req<{ date: string; customers: BirthdayCustomer[] }>("/admin/birthdays/today"),
   adminSendBirthdays: () => req<{ date: string; sent: any[]; twilio_ready: boolean }>("/admin/birthdays/send", { method: "POST" }),

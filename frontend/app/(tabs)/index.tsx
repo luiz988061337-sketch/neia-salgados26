@@ -46,6 +46,7 @@ export default function Home() {
         <View>
           <Text style={styles.hello}>Olá 👋</Text>
           <Text style={styles.brand}>Néia Salgados</Text>
+          <Text style={styles.tagline}>O sabor que faz a diferença</Text>
         </View>
         <View style={{ flexDirection: "row", gap: SPACING.sm }}>
           <Pressable testID="header-bell-btn" onPress={() => phone && setShowNotif(true)} style={styles.cartBtn}>
@@ -209,6 +210,7 @@ const styles = StyleSheet.create({
   },
   hello: { fontSize: 12, color: COLORS.muted, fontWeight: "500" },
   brand: { fontSize: 22, fontWeight: "800", color: COLORS.onSurface, letterSpacing: -0.5 },
+  tagline: { fontSize: 12, fontWeight: "600", color: COLORS.brand, fontStyle: "italic", marginTop: 2 },
   cartBtn: {
     width: 44, height: 44, borderRadius: RADIUS.pill, backgroundColor: COLORS.surfaceSecondary,
     alignItems: "center", justifyContent: "center",

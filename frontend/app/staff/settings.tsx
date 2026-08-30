@@ -1,7 +1,7 @@
 import { useRouter } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft, CaretRight, ChartBar, Crown, ForkKnife, Gift, MapPin, Ranking, Sparkle, Storefront, Ticket } from "phosphor-react-native";
+import { ArrowLeft, CaretRight, ChartBar, Crown, ForkKnife, Gift, MapPin, Motorcycle, Ranking, Sparkle, Storefront, Ticket, Trophy } from "phosphor-react-native";
 
 import { COLORS, RADIUS, SPACING } from "@/src/theme";
 
@@ -35,11 +35,25 @@ export default function StaffSettings() {
           onPress={() => router.push("/staff/analytics")}
         />
         <Row
+          testID="go-motoboys-admin"
+          icon={<Motorcycle color={COLORS.brand} size={22} weight="fill" />}
+          title="Motoboys"
+          subtitle="Cadastrar, editar senha e ativar/desativar entregadores"
+          onPress={() => router.push("/staff/motoboys-admin")}
+        />
+        <Row
           testID="go-ranking"
           icon={<Ranking color={COLORS.brand} size={22} weight="fill" />}
-          title="Ranking de Motoboys"
-          subtitle="Quem entregou mais rápido hoje"
+          title="Financeiro Motoboys"
+          subtitle="Soma de taxas, entregas e faturamento por período"
           onPress={() => router.push("/staff/ranking")}
+        />
+        <Row
+          testID="go-loyalty"
+          icon={<Trophy color={COLORS.brand} size={22} weight="fill" />}
+          title="Plano de Fidelidade"
+          subtitle="Editar pontos por real e níveis de resgate"
+          onPress={() => router.push("/staff/loyalty")}
         />
         <Row
           testID="go-vip"

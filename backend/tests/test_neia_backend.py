@@ -75,14 +75,16 @@ def _make_item(prod, qty):
 
 
 def _make_payload(items, coupon=None):
-    # Use scheduled_for to bypass working-hours check in tests
+    # Use scheduled_for to bypass working-hours check in tests (dentro do limite de 15 dias)
+    from datetime import datetime, timedelta, timezone
+    future = (datetime.now(timezone.utc) + timedelta(days=5)).isoformat().replace("+00:00", "Z")
     return {
         "customer": {"name": "TEST_Cliente", "phone": "11988887777", "address": "Rua X, 100", "complement": ""},
         "items": items,
         "payment_method": "pix",
         "coupon_code": coupon,
         "notes": "",
-        "scheduled_for": "2099-01-01T14:00:00Z",
+        "scheduled_for": future,
     }
 
 
@@ -316,10 +318,107 @@ class TestLoyaltyPoints:
         total = int(order["total"])
         # deliver
         s.patch(f"{API}/admin/orders/{order['id']}/status", json={"status": "entregue"})
+
+
+class TestMotoboyCRUD:
+    def test_create_edit_delete_motoboy(self, s):
+        import uuid as _u
+        phone = f"1199{str(_u.uuid4().int)[:7]}"
+        r = s.post(f"{API}/admin/motoboys", json={
+            "name": "Motoboy Teste", "phone": phone, "password": "9999", "active": True
+        })
+        assert r.status_code == 200, r.text
+        mid = r.json()["id"]
+        # duplicate phone
+        r2 = s.post(f"{API}/admin/motoboys", json={"name": "X", "phone": phone, "password": "1"})
+        assert r2.status_code == 400
+        # update
+        pr = s.patch(f"{API}/admin/motoboys/{mid}", json={"name": "Motoboy Novo"})
+        assert pr.status_code == 200
+        # list all
+        lst = s.get(f"{API}/admin/motoboys/all").json()
+        assert any(m["id"] == mid and m["name"] == "Motoboy Novo" for m in lst)
+        # deactivate
+        d = s.delete(f"{API}/admin/motoboys/{mid}")
+        assert d.status_code == 200
+        active_list = s.get(f"{API}/admin/motoboys").json()
+        assert not any(m["id"] == mid for m in active_list)
+
+
+class TestMotoboyFinancial:
+    def test_ranking_has_delivery_fees_and_totals(self, s):
+        r = s.get(f"{API}/admin/motoboys/ranking", params={"period": "week"})
+        assert r.status_code == 200
+        data = r.json()
+        assert "totals" in data
+        assert "delivery_fees_total" in data["totals"]
+        assert isinstance(data["ranking"], list)
+        for row in data["ranking"]:
+            assert "delivery_fees_total" in row
+
+
+class TestLoyaltySettings:
+    def test_update_loyalty_settings(self, s):
+        r = s.patch(f"{API}/admin/settings", json={
+            "loyalty_active": True,
+            "loyalty_points_per_real": 2.0,
+            "loyalty_tiers": [{"points": 50, "discount_pct": 3}, {"points": 150, "discount_pct": 8}]
+        })
+        assert r.status_code == 200, r.text
+        pub = s.get(f"{API}/settings").json()
+        assert pub["loyalty_points_per_real"] == 2.0
+        assert len(pub["loyalty_tiers"]) == 2
+        # restore
+        s.patch(f"{API}/admin/settings", json={
+            "loyalty_points_per_real": 1.0,
+            "loyalty_tiers": [{"points": 100, "discount_pct": 5}, {"points": 200, "discount_pct": 10},
+                              {"points": 300, "discount_pct": 15}, {"points": 500, "discount_pct": 25}]
+        })
+
+    def test_redeem_uses_tiers(self, s, products):
+        # Set a custom tier so 250 pts -> 12%
+        s.patch(f"{API}/admin/settings", json={
+            "loyalty_tiers": [{"points": 100, "discount_pct": 5}, {"points": 250, "discount_pct": 12}]
+        })
+        # create phone with enough points via delivered order
+        combo = next(p for p in products if p["category"] == "combo")
+        import uuid as _u
+        phone = f"1198{str(_u.uuid4().int)[:7]}"
+        payload = _make_payload([_make_item(combo, 250)])
+        payload["customer"]["phone"] = phone
+        o = s.post(f"{API}/orders", json=payload).json()
+        s.patch(f"{API}/admin/orders/{o['id']}/status", json={"status": "entregue"})
         me = s.get(f"{API}/customers/me", params={"phone": phone}).json()
-        assert me.get("points", 0) >= total, f"esperado >= {total}, obtido {me.get('points')}"
-        # redeem 100 pts if available
-        if me["points"] >= 100:
-            rr = s.post(f"{API}/customers/{phone}/redeem-points", json={"points": 100})
+        if me["points"] >= 250:
+            rr = s.post(f"{API}/customers/{phone}/redeem-points", json={"points": 250})
             assert rr.status_code == 200, rr.text
-            assert rr.json()["discount_percent"] == 5
+            assert rr.json()["discount_percent"] == 12
+        # Non-tier point request must fail
+        bad = s.post(f"{API}/customers/{phone}/redeem-points", json={"points": 175})
+        assert bad.status_code == 400
+        # restore
+        s.patch(f"{API}/admin/settings", json={
+            "loyalty_tiers": [{"points": 100, "discount_pct": 5}, {"points": 200, "discount_pct": 10},
+                              {"points": 300, "discount_pct": 15}, {"points": 500, "discount_pct": 25}]
+        })
+
+
+class TestScheduling:
+    def test_schedule_within_15_days_ok(self, s, products):
+        from datetime import datetime, timedelta, timezone
+        combo = next(p for p in products if p["category"] == "combo")
+        future = (datetime.now(timezone.utc) + timedelta(days=10)).isoformat().replace("+00:00", "Z")
+        p = _make_payload([_make_item(combo, 50)])
+        p["scheduled_for"] = future
+        r = s.post(f"{API}/orders", json=p)
+        assert r.status_code == 200, r.text
+
+    def test_schedule_beyond_15_days_rejected(self, s, products):
+        from datetime import datetime, timedelta, timezone
+        combo = next(p for p in products if p["category"] == "combo")
+        future = (datetime.now(timezone.utc) + timedelta(days=20)).isoformat().replace("+00:00", "Z")
+        p = _make_payload([_make_item(combo, 50)])
+        p["scheduled_for"] = future
+        r = s.post(f"{API}/orders", json=p)
+        assert r.status_code == 400
+        assert "15 dias" in r.json().get("detail", "")

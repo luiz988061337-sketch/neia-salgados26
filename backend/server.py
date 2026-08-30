@@ -213,6 +213,9 @@ class SettingsIn(BaseModel):
     close_time: Optional[str] = None
     birthday_coupon_pct: Optional[int] = None
     bulk_tiers: Optional[List[dict]] = None  # [{min_qty:int, discount_pct:int, label:str}]
+    loyalty_active: Optional[bool] = None
+    loyalty_points_per_real: Optional[float] = None
+    loyalty_tiers: Optional[List[dict]] = None  # [{points:int, discount_pct:int}]
 
 
 class ChatMessageIn(BaseModel):
@@ -312,7 +315,61 @@ class CouponPatch(BaseModel):
 
 
 class RedeemPointsIn(BaseModel):
-    points: int  # múltiplo de 100
+    points: int
+
+
+class PrintTemplateIn(BaseModel):
+    name: str
+    width_mm: int = 80  # 58 ou 80
+    header: str = ""
+    body_template: str = ""
+    footer: str = ""
+    active: bool = True
+
+
+class PrintTemplatePatch(BaseModel):
+    name: Optional[str] = None
+    width_mm: Optional[int] = None
+    header: Optional[str] = None
+    body_template: Optional[str] = None
+    footer: Optional[str] = None
+    active: Optional[bool] = None
+
+
+class PrinterIn(BaseModel):
+    name: str
+    model: str = ""
+    template_id: Optional[str] = None
+    width_mm: int = 80
+    is_default: bool = False
+    active: bool = True
+
+
+class PrinterPatch(BaseModel):
+    name: Optional[str] = None
+    model: Optional[str] = None
+    template_id: Optional[str] = None
+    width_mm: Optional[int] = None
+    is_default: Optional[bool] = None
+    active: Optional[bool] = None
+
+
+class MotoboyIn(BaseModel):
+    name: str
+    phone: str
+    password: str
+    photo_url: Optional[str] = ""
+    active: bool = True
+    commission_pct: Optional[float] = 0.0
+
+
+class MotoboyPatch(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    password: Optional[str] = None
+    photo_url: Optional[str] = None
+    active: Optional[bool] = None
+    commission_pct: Optional[float] = None
 
 
 # ============ STORAGE HELPERS ============
@@ -350,6 +407,14 @@ async def get_settings() -> dict:
             {"min_qty": 200, "discount_pct": 8, "label": "Encomenda Grande"},
             {"min_qty": 500, "discount_pct": 12, "label": "Encomenda em Massa"},
             {"min_qty": 1000, "discount_pct": 18, "label": "Encomenda Master"},
+        ],
+        "loyalty_active": True,
+        "loyalty_points_per_real": 1.0,
+        "loyalty_tiers": [
+            {"points": 100, "discount_pct": 5},
+            {"points": 200, "discount_pct": 10},
+            {"points": 300, "discount_pct": 15},
+            {"points": 500, "discount_pct": 25},
         ],
     }
     await db.settings.insert_one(default)
@@ -566,6 +631,45 @@ async def seed_data():
              "banner_image": "https://images.unsplash.com/photo-1560717845-968823efbee1?w=800&q=80", "active": False},
         ])
 
+    if await db.print_templates.count_documents({}) == 0:
+        default_body = (
+            "PEDIDO #{short_code}\n"
+            "{created_at}\n"
+            "--------------------------------\n"
+            "Cliente: {customer_name}\n"
+            "Tel: {customer_phone}\n"
+            "End: {customer_address}\n"
+            "--------------------------------\n"
+            "{items}\n"
+            "--------------------------------\n"
+            "Subtotal:  R$ {subtotal}\n"
+            "Entrega:   R$ {delivery_fee}\n"
+            "Desconto:  R$ {discount}\n"
+            "TOTAL:     R$ {total}\n"
+            "Pagto: {payment_method}\n"
+        )
+        await db.print_templates.insert_many([
+            {"id": str(uuid.uuid4()), "name": "80mm — Padrão", "width_mm": 80,
+             "header": "*** NÉIA SALGADOS ***\nO sabor que faz a diferença\n",
+             "body_template": default_body,
+             "footer": "\nObrigado pela preferencia!\n💛 Volte sempre 💛\n",
+             "active": True, "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": str(uuid.uuid4()), "name": "58mm — Compacto", "width_mm": 58,
+             "header": "NEIA SALGADOS\n",
+             "body_template": default_body,
+             "footer": "\nObrigado!\n",
+             "active": True, "created_at": datetime.now(timezone.utc).isoformat()},
+        ])
+
+    if await db.printers.count_documents({}) == 0:
+        t80 = await db.print_templates.find_one({"width_mm": 80}, {"_id": 0})
+        await db.printers.insert_one({
+            "id": str(uuid.uuid4()), "name": "Impressora Balcão", "model": "Bematech MP-4200",
+            "template_id": t80["id"] if t80 else None, "width_mm": 80,
+            "is_default": True, "active": True,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+
 
 # ============ ROUTES ============
 @api_router.get("/")
@@ -719,24 +823,32 @@ async def customer_me(phone: str):
 
 @api_router.post("/customers/{phone}/redeem-points")
 async def redeem_points(phone: str, body: RedeemPointsIn):
-    if body.points <= 0 or body.points % 100 != 0:
-        raise HTTPException(400, "Resgate em múltiplos de 100 pontos")
+    s = await get_settings()
+    if not bool(s.get("loyalty_active", True)):
+        raise HTTPException(400, "Programa de fidelidade desativado")
+    tiers = s.get("loyalty_tiers") or [
+        {"points": 100, "discount_pct": 5},
+        {"points": 200, "discount_pct": 10},
+        {"points": 300, "discount_pct": 15},
+        {"points": 500, "discount_pct": 25},
+    ]
+    valid_points = [int(t["points"]) for t in tiers]
+    if body.points <= 0 or body.points not in valid_points:
+        raise HTTPException(400, f"Resgate deve ser em {sorted(valid_points)} pontos")
     c = await db.customers.find_one({"phone": phone}, {"_id": 0})
     if not c:
         raise HTTPException(404, "Cliente não encontrado")
     current = int(c.get("points", 0) or 0)
     if current < body.points:
         raise HTTPException(400, f"Você tem apenas {current} pontos")
-    # 100 pontos = R$ 5 = ~5% pra pedido de R$100. Usaremos desconto FIXO em Real via cupom "custom".
-    # Como a estrutura atual só tem discount_percent, vamos aproximar em %:
-    # 100 pts => 5%; 200 pts => 10%; 300 pts => 15% (teto 25%).
-    pct = min(25, (body.points // 100) * 5)
+    tier = next((t for t in tiers if int(t["points"]) == body.points), None)
+    pct = int(tier["discount_pct"]) if tier else 5
     code = f"FID{phone[-4:]}-{int(datetime.now(timezone.utc).timestamp())}"
     await db.coupons.insert_one({
         "code": code, "discount_percent": pct, "active": True,
         "belongs_to": phone, "reason": "loyalty",
         "max_uses": 1, "uses_count": 0,
-        "description": f"Cupom fidelidade — {body.points} pontos → {pct}% off",
+        "description": f"Cupom fidelidade — {body.points} pts → {pct}% off",
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
     await db.customers.update_one({"phone": phone}, {"$inc": {"points": -body.points}})
@@ -875,6 +987,9 @@ async def get_public_settings():
         "close_time": s.get("close_time", "20:00"),
         "birthday_coupon_pct": s.get("birthday_coupon_pct", 20),
         "bulk_tiers": s.get("bulk_tiers", []),
+        "loyalty_active": bool(s.get("loyalty_active", True)),
+        "loyalty_points_per_real": float(s.get("loyalty_points_per_real", 1.0)),
+        "loyalty_tiers": s.get("loyalty_tiers", []),
     }
 
 
@@ -894,19 +1009,78 @@ async def update_admin_settings(body: SettingsIn):
     return await get_settings()
 
 
-# --- Motoboys ranking
+# --- Customer of the Month
+@api_router.get("/customers/top-of-month")
+async def customer_of_the_month():
+    """Retorna o cliente que mais gastou (entregue) no mês corrente + cupom especial pré-criado (20%)."""
+    now = datetime.now(timezone.utc) - timedelta(hours=3)  # SP
+    start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+    if now.month == 12:
+        next_month = datetime(now.year + 1, 1, 1, tzinfo=timezone.utc)
+    else:
+        next_month = datetime(now.year, now.month + 1, 1, tzinfo=timezone.utc)
+    pipeline = [
+        {"$match": {
+            "status": "entregue",
+            "delivered_at": {"$gte": start.isoformat(), "$lt": next_month.isoformat()},
+        }},
+        {"$group": {
+            "_id": "$customer.phone",
+            "name": {"$last": "$customer.name"},
+            "orders_count": {"$sum": 1},
+            "total_spent": {"$sum": "$total"},
+        }},
+        {"$sort": {"total_spent": -1}},
+        {"$limit": 1},
+    ]
+    docs = await db.orders.aggregate(pipeline).to_list(1)
+    if not docs:
+        return {"month": start.strftime("%Y-%m"), "customer": None, "coupon": None}
+    top = docs[0]
+    phone = top["_id"]
+    # gerar cupom especial (uma vez por mês por cliente)
+    month_key = start.strftime("%Y-%m")
+    code = f"TOP{month_key.replace('-','')}-{phone[-4:]}"
+    existing = await db.coupons.find_one({"code": code}, {"_id": 0})
+    if not existing:
+        await db.coupons.insert_one({
+            "code": code, "discount_percent": 20, "active": True,
+            "belongs_to": phone, "reason": "customer_of_month",
+            "max_uses": 1, "uses_count": 0,
+            "description": f"🏆 Cliente do Mês {month_key} — 20% off",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+    return {
+        "month": month_key,
+        "customer": {
+            "phone": phone, "name": top.get("name") or "",
+            "orders_count": int(top.get("orders_count", 0)),
+            "total_spent": round(float(top.get("total_spent", 0)), 2),
+        },
+        "coupon": {"code": code, "discount_percent": 20},
+    }
+
+
+# --- Motoboys ranking / financial
 @api_router.get("/admin/motoboys/ranking")
-async def motoboys_ranking(date: Optional[str] = None):
-    """Ranking do dia. Data no formato YYYY-MM-DD (UTC). Sem date = hoje."""
+async def motoboys_ranking(date: Optional[str] = None, period: Optional[str] = None):
+    """Ranking com soma de taxa. period=today|week|month, ou date=YYYY-MM-DD (dia específico)."""
+    now = datetime.now(timezone.utc)
     if date:
         try:
-            day = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            start = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            end = start + timedelta(days=1)
+            label = start.strftime("%Y-%m-%d")
         except ValueError:
             raise HTTPException(400, "Data inválida (use YYYY-MM-DD)")
     else:
-        now = datetime.now(timezone.utc)
-        day = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
-    next_day = day + timedelta(days=1)
+        today0 = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+        if period == "week":
+            start = today0 - timedelta(days=6); end = today0 + timedelta(days=1); label = f"Últimos 7 dias"
+        elif period == "month":
+            start = today0 - timedelta(days=29); end = today0 + timedelta(days=1); label = f"Últimos 30 dias"
+        else:  # today (default)
+            start = today0; end = today0 + timedelta(days=1); label = start.strftime("%Y-%m-%d")
 
     motos = await db.motoboys.find({"active": True}, {"_id": 0, "password": 0}).to_list(50)
     results = []
@@ -914,27 +1088,43 @@ async def motoboys_ranking(date: Optional[str] = None):
         cursor = db.orders.find({
             "motoboy_id": m["id"],
             "status": "entregue",
-            "delivered_at": {"$gte": day.isoformat(), "$lt": next_day.isoformat()},
-        }, {"_id": 0, "created_at": 1, "delivered_at": 1, "total": 1})
+            "delivered_at": {"$gte": start.isoformat(), "$lt": end.isoformat()},
+        }, {"_id": 0})
         deliveries = []
         async for o in cursor:
             try:
                 created = datetime.fromisoformat(o["created_at"].replace("Z", "+00:00"))
                 delivered = datetime.fromisoformat(o["delivered_at"].replace("Z", "+00:00"))
                 mins = (delivered - created).total_seconds() / 60
-                deliveries.append({"minutes": round(mins, 1), "total": float(o.get("total", 0))})
+                deliveries.append({
+                    "minutes": round(mins, 1),
+                    "total": float(o.get("total", 0)),
+                    "delivery_fee": float(o.get("delivery_fee", 0)),
+                })
             except Exception:
                 continue
         count = len(deliveries)
         avg_minutes = round(sum(d["minutes"] for d in deliveries) / count, 1) if count else None
         revenue = round(sum(d["total"] for d in deliveries), 2)
+        delivery_fees_total = round(sum(d["delivery_fee"] for d in deliveries), 2)
+        commission_pct = float(m.get("commission_pct", 0) or 0)
+        commission_earned = round(delivery_fees_total * commission_pct / 100.0, 2)
         results.append({
             "motoboy_id": m["id"], "name": m["name"], "phone": m["phone"],
-            "deliveries": count, "avg_minutes": avg_minutes, "revenue": revenue,
+            "photo_url": m.get("photo_url", ""),
+            "commission_pct": commission_pct,
+            "commission_earned": commission_earned,
+            "deliveries": count, "avg_minutes": avg_minutes,
+            "revenue": revenue, "delivery_fees_total": delivery_fees_total,
         })
-    # Sort: fewer avg minutes first (None goes last), then more deliveries first
-    results.sort(key=lambda r: (r["avg_minutes"] is None, r["avg_minutes"] or 0, -r["deliveries"]))
-    return {"date": day.strftime("%Y-%m-%d"), "ranking": results}
+    results.sort(key=lambda r: (-r["delivery_fees_total"], r["avg_minutes"] is None, r["avg_minutes"] or 0, -r["deliveries"]))
+    totals = {
+        "deliveries": sum(r["deliveries"] for r in results),
+        "delivery_fees_total": round(sum(r["delivery_fees_total"] for r in results), 2),
+        "commission_total": round(sum(r["commission_earned"] for r in results), 2),
+        "revenue": round(sum(r["revenue"] for r in results), 2),
+    }
+    return {"date": label, "period": period or ("range" if date else "today"), "ranking": results, "totals": totals}
 
 
 # --- Themes
@@ -967,6 +1157,20 @@ async def create_order(payload: OrderCreate):
     # Working hours: allow only if store is open now OR if it's a scheduled order
     if not payload.scheduled_for and not is_store_open(settings):
         raise HTTPException(400, "Loja fechada agora. Agende sua entrega ou tente no próximo horário.")
+
+    # Validar agendamento (até 15 dias no futuro)
+    if payload.scheduled_for:
+        try:
+            sched = datetime.fromisoformat(payload.scheduled_for.replace("Z", "+00:00"))
+            now_ = datetime.now(timezone.utc)
+            if sched < now_ - timedelta(minutes=5):
+                raise HTTPException(400, "Data agendada precisa ser no futuro")
+            if sched > now_ + timedelta(days=15):
+                raise HTTPException(400, "Agendamento máximo é de 15 dias no futuro")
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(400, "Data agendada inválida")
 
     distance_km: Optional[float] = None
     if payload.customer.delivery_lat is not None and payload.customer.delivery_lng is not None:
@@ -1161,6 +1365,7 @@ async def get_order(order_id: str):
                 "last_ping": m.get("last_ping"),
                 "name": m.get("name"),
                 "phone": m.get("phone"),
+                "photo_url": m.get("photo_url") or "",
             }
     return doc
 
@@ -1234,19 +1439,22 @@ async def complete_delivery(motoboy_id: str, order_id: str):
         raise HTTPException(404, "Pedido não encontrado")
     # Award loyalty points
     if prev and prev.get("status") != "entregue":
-        pts = int(float(prev.get("total", 0)))
-        if pts > 0:
-            await db.customers.update_one(
-                {"phone": prev["customer"]["phone"]},
-                {"$inc": {"points": pts}, "$set": {"updated_at": now}},
-                upsert=True,
-            )
-            await create_notification(
-                phone=prev["customer"]["phone"],
-                title=f"🏆 +{pts} pontos!",
-                body=f"Você ganhou {pts} pontos pelo pedido #{prev['short_code']}. Junte 100 e troque por cupom!",
-                kind="loyalty", order_id=order_id,
-            )
+        s_ = await get_settings()
+        if bool(s_.get("loyalty_active", True)):
+            ratio = float(s_.get("loyalty_points_per_real", 1.0) or 1.0)
+            pts = int(float(prev.get("total", 0)) * ratio)
+            if pts > 0:
+                await db.customers.update_one(
+                    {"phone": prev["customer"]["phone"]},
+                    {"$inc": {"points": pts}, "$set": {"updated_at": now}},
+                    upsert=True,
+                )
+                await create_notification(
+                    phone=prev["customer"]["phone"],
+                    title=f"🏆 +{pts} pontos!",
+                    body=f"Você ganhou {pts} pontos pelo pedido #{prev['short_code']}.",
+                    kind="loyalty", order_id=order_id,
+                )
     return {"ok": True}
 
 
@@ -1279,21 +1487,24 @@ async def admin_update_status(order_id: str, body: StatusUpdate):
     if r.matched_count == 0:
         raise HTTPException(404, "Pedido não encontrado")
 
-    # Conceder pontos de fidelidade ao entregar (1 ponto por R$1, apenas na 1ª vez)
+    # Conceder pontos de fidelidade ao entregar (usa loyalty_points_per_real, apenas na 1ª vez)
     if body.status == "entregue" and prev and prev.get("status") != "entregue":
-        pts = int(float(prev.get("total", 0)))
-        if pts > 0:
-            await db.customers.update_one(
-                {"phone": prev["customer"]["phone"]},
-                {"$inc": {"points": pts}, "$set": {"updated_at": now}},
-                upsert=True,
-            )
-            await create_notification(
-                phone=prev["customer"]["phone"],
-                title=f"🏆 +{pts} pontos!",
-                body=f"Você ganhou {pts} pontos de fidelidade pelo pedido #{prev['short_code']}. Junte 100 e troque por cupom!",
-                kind="loyalty", order_id=order_id,
-            )
+        s_ = await get_settings()
+        if bool(s_.get("loyalty_active", True)):
+            ratio = float(s_.get("loyalty_points_per_real", 1.0) or 1.0)
+            pts = int(float(prev.get("total", 0)) * ratio)
+            if pts > 0:
+                await db.customers.update_one(
+                    {"phone": prev["customer"]["phone"]},
+                    {"$inc": {"points": pts}, "$set": {"updated_at": now}},
+                    upsert=True,
+                )
+                await create_notification(
+                    phone=prev["customer"]["phone"],
+                    title=f"🏆 +{pts} pontos!",
+                    body=f"Você ganhou {pts} pontos de fidelidade pelo pedido #{prev['short_code']}.",
+                    kind="loyalty", order_id=order_id,
+                )
 
     # Auto-notificar via WhatsApp (Twilio) se configurado e habilitado
     settings = await get_settings()
@@ -1343,13 +1554,97 @@ async def admin_assign(order_id: str, body: AssignMotoboy):
     )
     if r.matched_count == 0:
         raise HTTPException(404, "Pedido não encontrado")
-    return {"ok": True, "motoboy_name": m["name"]}
+
+    # Enviar WhatsApp para o motoboy com endereço + link do Google Maps
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    notify: dict = {"sent": False, "reason": "twilio_not_configured"}
+    if order and twilio_ready():
+        try:
+            lat = order["customer"].get("delivery_lat")
+            lng = order["customer"].get("delivery_lng")
+            addr = order["customer"].get("address", "")
+            comp = order["customer"].get("complement", "")
+            maps_link = (
+                f"https://www.google.com/maps/dir/?api=1&destination={lat},{lng}"
+                if lat and lng else
+                f"https://www.google.com/maps/search/?api=1&query={requests.utils.quote(addr)}"
+            )
+            msg = (
+                f"🛵 *Nova entrega — Néia Salgados*\n\n"
+                f"Pedido: *#{order['short_code']}*\n"
+                f"Cliente: {order['customer']['name']} — {order['customer']['phone']}\n"
+                f"Endereço: {addr}{(' • ' + comp) if comp else ''}\n"
+                f"Total: R$ {order['total']:.2f} ({order.get('payment_method','')})\n\n"
+                f"📍 Abrir no maps: {maps_link}"
+            )
+            notify = send_whatsapp(m["phone"], body=msg)
+            await db.message_logs.insert_one({
+                "id": str(uuid.uuid4()), "kind": "assign_motoboy",
+                "order_id": order_id, "phone": m["phone"], "result": notify,
+                "created_at": now,
+            })
+        except Exception as e:
+            notify = {"sent": False, "reason": str(e)}
+    return {"ok": True, "motoboy_name": m["name"], "notification": notify}
 
 
 @api_router.get("/admin/motoboys")
 async def admin_list_motoboys():
     docs = await db.motoboys.find({"active": True}, {"_id": 0, "password": 0}).to_list(50)
     return docs
+
+
+@api_router.get("/admin/motoboys/all")
+async def admin_list_all_motoboys():
+    docs = await db.motoboys.find({}, {"_id": 0, "password": 0}).sort("name", 1).to_list(100)
+    return docs
+
+
+@api_router.post("/admin/motoboys")
+async def admin_create_motoboy(body: MotoboyIn):
+    if not body.name.strip() or not body.phone.strip() or not body.password.strip():
+        raise HTTPException(400, "Nome, telefone e senha são obrigatórios")
+    exists = await db.motoboys.find_one({"phone": body.phone.strip()})
+    if exists:
+        raise HTTPException(400, "Já existe motoboy com esse telefone")
+    doc = {
+        "id": str(uuid.uuid4()),
+        "name": body.name.strip(),
+        "phone": body.phone.strip(),
+        "password": body.password.strip(),
+        "photo_url": body.photo_url or "",
+        "active": bool(body.active),
+        "commission_pct": float(body.commission_pct or 0.0),
+        "current_lat": None, "current_lng": None, "last_ping": None,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.motoboys.insert_one(doc)
+    doc.pop("_id", None)
+    doc.pop("password", None)
+    return doc
+
+
+@api_router.patch("/admin/motoboys/{motoboy_id}")
+async def admin_update_motoboy(motoboy_id: str, body: MotoboyPatch):
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    if not updates:
+        raise HTTPException(400, "Nada para atualizar")
+    if "phone" in updates:
+        clash = await db.motoboys.find_one({"phone": updates["phone"], "id": {"$ne": motoboy_id}})
+        if clash:
+            raise HTTPException(400, "Já existe motoboy com esse telefone")
+    r = await db.motoboys.update_one({"id": motoboy_id}, {"$set": updates})
+    if r.matched_count == 0:
+        raise HTTPException(404, "Motoboy não encontrado")
+    return {"ok": True}
+
+
+@api_router.delete("/admin/motoboys/{motoboy_id}")
+async def admin_delete_motoboy(motoboy_id: str):
+    r = await db.motoboys.update_one({"id": motoboy_id}, {"$set": {"active": False}})
+    if r.matched_count == 0:
+        raise HTTPException(404, "Motoboy não encontrado")
+    return {"ok": True}
 
 
 # Admin — Products
@@ -1389,6 +1684,136 @@ async def admin_delete_product(product_id: str):
     if r.matched_count == 0:
         raise HTTPException(404, "Produto não encontrado")
     return {"ok": True}
+
+
+# Admin — Print Templates & Printers
+@api_router.get("/admin/print-templates")
+async def list_print_templates():
+    docs = await db.print_templates.find({}, {"_id": 0}).sort("width_mm", 1).to_list(50)
+    return docs
+
+
+@api_router.post("/admin/print-templates")
+async def create_print_template(body: PrintTemplateIn):
+    doc = body.model_dump()
+    doc["id"] = str(uuid.uuid4())
+    doc["created_at"] = datetime.now(timezone.utc).isoformat()
+    await db.print_templates.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.patch("/admin/print-templates/{template_id}")
+async def update_print_template(template_id: str, body: PrintTemplatePatch):
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    if not updates:
+        raise HTTPException(400, "Nada para atualizar")
+    r = await db.print_templates.update_one({"id": template_id}, {"$set": updates})
+    if r.matched_count == 0:
+        raise HTTPException(404, "Modelo não encontrado")
+    return {"ok": True}
+
+
+@api_router.delete("/admin/print-templates/{template_id}")
+async def delete_print_template(template_id: str):
+    r = await db.print_templates.delete_one({"id": template_id})
+    if r.deleted_count == 0:
+        raise HTTPException(404, "Modelo não encontrado")
+    return {"ok": True}
+
+
+@api_router.get("/admin/printers")
+async def list_printers():
+    docs = await db.printers.find({}, {"_id": 0}).to_list(50)
+    return docs
+
+
+@api_router.post("/admin/printers")
+async def create_printer(body: PrinterIn):
+    doc = body.model_dump()
+    doc["id"] = str(uuid.uuid4())
+    doc["created_at"] = datetime.now(timezone.utc).isoformat()
+    # Se for default, desmarcar os outros
+    if doc.get("is_default"):
+        await db.printers.update_many({}, {"$set": {"is_default": False}})
+    await db.printers.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.patch("/admin/printers/{printer_id}")
+async def update_printer(printer_id: str, body: PrinterPatch):
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    if not updates:
+        raise HTTPException(400, "Nada para atualizar")
+    if updates.get("is_default"):
+        await db.printers.update_many({"id": {"$ne": printer_id}}, {"$set": {"is_default": False}})
+    r = await db.printers.update_one({"id": printer_id}, {"$set": updates})
+    if r.matched_count == 0:
+        raise HTTPException(404, "Impressora não encontrada")
+    return {"ok": True}
+
+
+@api_router.delete("/admin/printers/{printer_id}")
+async def delete_printer(printer_id: str):
+    r = await db.printers.delete_one({"id": printer_id})
+    if r.deleted_count == 0:
+        raise HTTPException(404, "Impressora não encontrada")
+    return {"ok": True}
+
+
+@api_router.get("/admin/orders/{order_id}/receipt")
+async def get_order_receipt(order_id: str, printer_id: Optional[str] = None):
+    """Retorna a comanda renderizada (texto + HTML) pronta para impressão."""
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(404, "Pedido não encontrado")
+
+    # escolher impressora
+    printer = None
+    if printer_id:
+        printer = await db.printers.find_one({"id": printer_id}, {"_id": 0})
+    if not printer:
+        printer = await db.printers.find_one({"is_default": True, "active": True}, {"_id": 0}) \
+            or await db.printers.find_one({"active": True}, {"_id": 0})
+    template = None
+    if printer and printer.get("template_id"):
+        template = await db.print_templates.find_one({"id": printer["template_id"]}, {"_id": 0})
+    if not template:
+        template = await db.print_templates.find_one({"active": True}, {"_id": 0})
+    if not template:
+        raise HTTPException(400, "Nenhum modelo de impressão configurado")
+
+    # renderizar
+    items_txt = "\n".join(
+        f"{i.get('quantity',0)}x {i.get('product_name','')}  R$ {i.get('subtotal',0):.2f}"
+        for i in order.get("items", [])
+    )
+    ctx = {
+        "short_code": order.get("short_code", ""),
+        "created_at": order.get("created_at", "")[:19].replace("T", " "),
+        "customer_name": order["customer"].get("name", ""),
+        "customer_phone": order["customer"].get("phone", ""),
+        "customer_address": (order["customer"].get("address", "")
+                             + ((" • " + order["customer"].get("complement", "")) if order["customer"].get("complement") else "")),
+        "items": items_txt,
+        "subtotal": f"{order.get('subtotal',0):.2f}",
+        "delivery_fee": f"{order.get('delivery_fee',0):.2f}",
+        "discount": f"{order.get('discount',0):.2f}",
+        "total": f"{order.get('total',0):.2f}",
+        "payment_method": order.get("payment_method", ""),
+        "notes": order.get("notes", "") or "",
+    }
+    def _render(s: str) -> str:
+        try: return s.format(**ctx)
+        except Exception: return s
+    text = _render(template.get("header", "")) + _render(template.get("body_template", "")) + _render(template.get("footer", ""))
+    return {
+        "text": text,
+        "width_mm": template.get("width_mm", 80),
+        "printer": {"id": printer["id"], "name": printer["name"]} if printer else None,
+        "template": {"id": template["id"], "name": template["name"]},
+    }
 
 
 # Admin — Coupons

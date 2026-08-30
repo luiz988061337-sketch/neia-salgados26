@@ -12,11 +12,13 @@ export default function Profile() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [me, setMe] = useState<any>(null);
+  const [settings, setSettings] = useState<any>(null);
 
   useFocusEffect(useCallback(() => {
     getCustomer().then((c: any) => {
       if (c?.phone) api.getMe(c.phone).then(setMe).catch(() => {});
     });
+    api.getSettings().then(setSettings).catch(() => {});
   }, []));
 
   const shareCode = () => {
@@ -63,11 +65,11 @@ export default function Profile() {
           <Storefront color={COLORS.brand} size={28} weight="fill" />
           <View style={{ flex: 1 }}>
             <Text style={styles.brandName}>Néia Salgados</Text>
-            <Text style={styles.brandSub}>Salgados fritos e congelados de qualidade</Text>
+            <Text style={styles.brandSub}>O sabor que faz a diferença 💛</Text>
           </View>
         </View>
 
-        {me?.phone && (
+        {me?.phone && (settings?.loyalty_active !== false) && (
           <>
             <Text style={styles.section}>Programa Fidelidade</Text>
             <View style={styles.loyaltyCard}>
@@ -75,32 +77,49 @@ export default function Profile() {
                 <Trophy color={COLORS.warning} size={26} weight="fill" />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.loyTitle}>Seus pontos</Text>
-                  <Text style={styles.loySub}>Ganhe 1 ponto a cada R$ 1 pedido</Text>
+                  <Text style={styles.loySub}>
+                    Ganhe {settings?.loyalty_points_per_real ?? 1} pt a cada R$ 1
+                  </Text>
                 </View>
                 <Text testID="loyalty-points" style={styles.loyPts}>{me?.points ?? 0}</Text>
               </View>
-              <View style={styles.loyBar}>
-                <View style={[styles.loyFill, { width: `${Math.min(100, ((me?.points ?? 0) % 100))}%` }]} />
-              </View>
-              <Text style={styles.loyProgress}>
-                {(me?.points ?? 0) < 100
-                  ? `Faltam ${100 - ((me?.points ?? 0) % 100)} pts para o próximo cupom (5% off)`
-                  : `Você pode resgatar ${Math.floor((me?.points ?? 0) / 100) * 5}% off (máx 25%)`}
-              </Text>
-              <View style={styles.redeemRow}>
-                <Pressable testID="redeem-100" disabled={(me?.points ?? 0) < 100} onPress={() => redeem(100)}
-                  style={[styles.redeemBtn, (me?.points ?? 0) < 100 && styles.redeemBtnDisabled]}>
-                  <Text style={[styles.redeemText, (me?.points ?? 0) < 100 && { color: COLORS.muted }]}>100 pts → 5% off</Text>
-                </Pressable>
-                <Pressable testID="redeem-200" disabled={(me?.points ?? 0) < 200} onPress={() => redeem(200)}
-                  style={[styles.redeemBtn, (me?.points ?? 0) < 200 && styles.redeemBtnDisabled]}>
-                  <Text style={[styles.redeemText, (me?.points ?? 0) < 200 && { color: COLORS.muted }]}>200 pts → 10% off</Text>
-                </Pressable>
-                <Pressable testID="redeem-500" disabled={(me?.points ?? 0) < 500} onPress={() => redeem(500)}
-                  style={[styles.redeemBtn, (me?.points ?? 0) < 500 && styles.redeemBtnDisabled]}>
-                  <Text style={[styles.redeemText, (me?.points ?? 0) < 500 && { color: COLORS.muted }]}>500 pts → 25% off</Text>
-                </Pressable>
-              </View>
+              {(() => {
+                const tiers: { points: number; discount_pct: number }[] =
+                  settings?.loyalty_tiers?.length
+                    ? [...settings.loyalty_tiers].sort((a: any, b: any) => a.points - b.points)
+                    : [{ points: 100, discount_pct: 5 }, { points: 200, discount_pct: 10 }, { points: 500, discount_pct: 25 }];
+                const pts = me?.points ?? 0;
+                const nextTier = tiers.find((t) => t.points > pts) || tiers[tiers.length - 1];
+                const bestTier = [...tiers].reverse().find((t) => t.points <= pts);
+                const progress = nextTier ? Math.min(100, (pts / nextTier.points) * 100) : 100;
+                return (
+                  <>
+                    <View style={styles.loyBar}>
+                      <View style={[styles.loyFill, { width: `${progress}%` }]} />
+                    </View>
+                    <Text style={styles.loyProgress}>
+                      {bestTier
+                        ? `✨ Você pode resgatar ${bestTier.discount_pct}% off (${bestTier.points} pts)`
+                        : `Faltam ${nextTier.points - pts} pts para ${nextTier.discount_pct}% off`}
+                    </Text>
+                    <View style={styles.redeemRow}>
+                      {tiers.map((t) => (
+                        <Pressable
+                          key={t.points}
+                          testID={`redeem-${t.points}`}
+                          disabled={pts < t.points}
+                          onPress={() => redeem(t.points)}
+                          style={[styles.redeemBtn, pts < t.points && styles.redeemBtnDisabled]}
+                        >
+                          <Text style={[styles.redeemText, pts < t.points && { color: COLORS.muted }]}>
+                            {t.points}pts → {t.discount_pct}% off
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </>
+                );
+              })()}
             </View>
           </>
         )}
