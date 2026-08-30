@@ -12,6 +12,7 @@ import { api, fileUrl, getCart, getCustomer, Product, StoreStatus, Theme } from 
 import { brl } from "@/src/format";
 import RotatingImage from "@/src/components/RotatingImage";
 import NotificationsSheet from "@/src/components/NotificationsSheet";
+import PWAInstallCard from "@/src/components/PWAInstallCard";
 
 const AnimatedImage = Animated.createAnimatedComponent(Image);
 
@@ -114,6 +115,9 @@ export default function Home() {
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+        <View style={{ paddingHorizontal: SPACING.lg }}>
+          <PWAInstallCard />
+        </View>
         {store && !store.is_open && (
           <View style={styles.closedBanner}>
             <Text style={styles.closedEmoji}>🌙</Text>
