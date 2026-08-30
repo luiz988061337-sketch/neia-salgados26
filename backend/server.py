@@ -21,7 +21,10 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'neia2026')
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD') or ""
+if not ADMIN_PASSWORD:
+    import warnings as _w
+    _w.warn("ADMIN_PASSWORD not set in environment — admin login will be unavailable. Set it in backend/.env or platform secrets.")
 EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY')
 STORAGE_BASE = (os.environ.get("INTEGRATION_PROXY_URL") or "").strip() or "https://integrations.emergentagent.com"
 STORAGE_URL = STORAGE_BASE.rstrip("/") + "/objstore/api/v1/storage"
@@ -126,7 +129,19 @@ async def notify_customer_out_for_delivery(order: dict):
     return send_whatsapp(phone, body=msg, media_url=media)
 
 app = FastAPI()
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
 api_router = APIRouter(prefix="/api")
+
+
+@api_router.get("/health")
+async def api_health():
+    return {"status": "ok"}
 
 
 # ============ MODELS ============
@@ -646,13 +661,8 @@ async def seed_data():
             })
         await db.products.insert_many(docs)
 
-    if await db.motoboys.count_documents({}) == 0:
-        await db.motoboys.insert_many([
-            {"id": str(uuid.uuid4()), "name": "Carlos Silva", "phone": "11999990001", "password": "1234",
-             "photo_url": "", "active": True, "current_lat": None, "current_lng": None, "last_ping": None},
-            {"id": str(uuid.uuid4()), "name": "Marcos Souza", "phone": "11999990002", "password": "1234",
-             "photo_url": "", "active": True, "current_lat": None, "current_lng": None, "last_ping": None},
-        ])
+    # Motoboys: NÃO criar seed em produção. O admin cria pelo painel `/staff/motoboys-admin`.
+    # (Em ambiente de dev/preview, se desejar seed pontual, execute manualmente pelo endpoint POST /api/admin/motoboys)
 
     if await db.coupons.count_documents({}) == 0:
         await db.coupons.insert_many([

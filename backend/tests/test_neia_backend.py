@@ -21,6 +21,22 @@ def products(s):
     return r.json()
 
 
+@pytest.fixture(scope="module", autouse=True)
+def _ensure_seed_motoboys(s):
+    """Garante motoboys 11999990001/11999990002 senha 1234 para os testes.
+    Criado via API pois o backend não faz mais seed automático."""
+    for phone, name in [("11999990001", "Carlos Silva"), ("11999990002", "Marcos Souza")]:
+        existing = [m for m in s.get(f"{API}/admin/motoboys/all").json() if m.get("phone") == phone]
+        if not existing:
+            s.post(f"{API}/admin/motoboys", json={
+                "name": name, "phone": phone, "password": "1234", "active": True
+            })
+        else:
+            # Garante ativo e senha 1234
+            s.patch(f"{API}/admin/motoboys/{existing[0]['id']}", json={"active": True, "password": "1234"})
+    return True
+
+
 # ============ PRODUCTS ============
 class TestProducts:
     def test_list_all_products_returns_six(self, s):

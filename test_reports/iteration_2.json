@@ -1,0 +1,38 @@
+{
+  "summary": "Validados os 3 security fixes do deployment_agent + novo endpoint /health. (1) Admin login: POST /api/admin/login com neia2026 → 200 {ok:true,token:'admin-session'}; senha errada → 401 {detail:'Senha inválida'}. (2) Seed de motoboys removido no server.py (linhas 659-660 são apenas comentário); Carlos/Marcos ainda aparecem em /api/admin/motoboys/all porque foram criados anteriormente no DB — mas NÃO serão recriados em DB novo. Fluxo POST /api/admin/motoboys → login /api/motoboy/login validado end-to-end (TEST_Motoboy_Iter2 criado, logou 200, senha errada 401, deletado 200). (3) Tela /staff/login: screenshots confirmam ausência de texto 'Motoboys demo: 11999990001/1234' — só placeholders dentro dos inputs. (4) GET /health (sem /api) retorna 200 {status:'ok'} apenas via porta interna 8001 (LB do k8s bate direto no pod); via ingress público /health cai no frontend Expo (comportamento esperado — ingress só roteia /api/* para backend). (5) Suite pytest completa: 56/56 passed em 4.25s (test_neia_backend.py + test_print_and_categories.py). Nenhuma regressão introduzida pelos fixes.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /health via ingress público", "issue": "Só acessível via localhost:8001 (rota interna do pod). Via https://.../health retorna HTML do Expo (ingress só roteia /api/* para backend). Isso é esperado para healthcheck de load balancer que bate direto no pod, mas se o LB usar o ingress público será necessário mover para /api/health ou configurar rota especial no ingress."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_neia_backend.py",
+    "/app/backend/tests/test_print_and_categories.py",
+    "/app/test_reports/pytest/pytest_iter2.xml"
+  ],
+  "action_items": [
+    "OPCIONAL: Style 'hint' definido em /app/frontend/app/staff/login.tsx:96 está órfão (não é mais referenciado após remoção do texto demo). Pode ser removido no próximo commit de limpeza.",
+    "OPCIONAL: Motoboys legados (Carlos Silva 11999990001, Marcos Souza 11999990002) ainda estão no DB atual. Se deployment_agent quer DB 100% limpo, execute `DELETE /api/admin/motoboys/<id>` para cada um, ou dê drop na collection motoboys em produção. Em DB fresco eles NÃO serão recriados.",
+    "OPCIONAL: Considere adicionar /api/health também (alias do /health) para permitir healthcheck via ingress público além do direct-pod."
+  ],
+  "critical_code_review_comments": [
+    "/app/backend/server.py:24-27 — ADMIN_PASSWORD lê apenas do env com warning se ausente. Fallback hardcoded removido corretamente.",
+    "/app/backend/server.py:659-660 — seed de motoboys removido, apenas comentário permanece.",
+    "/app/backend/server.py:134-136 — endpoint /health simples retorna {status:'ok'}, correto para probe.",
+    "/app/frontend/app/staff/login.tsx — sem hint text demo. Placeholders '11999990001' e '1234' são apenas dicas dentro do TextInput (aceitáveis, não vazam credenciais reais)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (56/56 pytest)", "frontend": "100% (staff/login limpo, screenshots validados)"},
+  "seed_data_creation": "Nenhum seed permanente criado. Motoboy TEST_Motoboy_Iter2 foi criado via POST /api/admin/motoboys e removido via DELETE ao final do teste manual.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Os 3 security fixes do deployment_agent estão validados. Suite pytest continua 56/56. Único ponto de atenção: /health só é acessível via porta interna 8001, não via ingress público (comportamento esperado para LB k8s). Motoboys legados Carlos/Marcos ainda existem no DB atual — se necessário DB limpo em prod, dropar collection manualmente.",
+  "rca_of_issue": "N/A — validação de fixes já aplicados pelo main agent. Todos comportamentos observados casam com a especificação: senha vem só do env, seed removido, tela limpa, /health OK internamente, 56 testes verdes."
+}

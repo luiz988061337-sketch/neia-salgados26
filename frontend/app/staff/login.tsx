@@ -75,10 +75,6 @@ export default function StaffLogin() {
         <Pressable testID="staff-login-submit" onPress={login} disabled={loading} style={[styles.cta, loading && { opacity: 0.6 }]}>
           <Text style={styles.ctaText}>{loading ? "Entrando…" : "Entrar"}</Text>
         </Pressable>
-
-        {!isAdmin && (
-          <Text style={styles.hint}>Motoboys demo: 11999990001 / 11999990002 (senha 1234)</Text>
-        )}
       </View>
     </KeyboardAvoidingView>
   );
@@ -97,5 +93,4 @@ const styles = StyleSheet.create({
   cta: { marginTop: SPACING.md, backgroundColor: COLORS.brand, paddingVertical: SPACING.md, borderRadius: RADIUS.pill, alignItems: "center" },
   ctaText: { color: COLORS.surface, fontWeight: "800", fontSize: 15 },
   error: { color: COLORS.error, fontSize: 13, fontWeight: "700", textAlign: "center" },
-  hint: { fontSize: 11, color: COLORS.muted, textAlign: "center", marginTop: SPACING.md },
 });

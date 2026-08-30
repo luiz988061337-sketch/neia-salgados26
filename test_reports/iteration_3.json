@@ -1,0 +1,34 @@
+{
+  "summary": "Health-check completo do app Néia Salgados após remoção do seed de motoboys e ajustes de segurança. RESULTADO: app 100% saudável, sem erros bloqueando carregamento. (1) Backend pytest: 56/56 passed em 4.56s (test_neia_backend.py + test_print_and_categories.py). (2) /api/health → {status:'ok'}; /api/products → 16 produtos com 3+ categorias; /api/settings → todos campos presentes (store_name, base_delivery_fee, pickup_eta_min, delivery_eta_min, bulk_tiers, etc). (3) Home (mobile 390x844) renderiza corretamente: logo Néia, 'Olá 👋', banner 'Loja fechada agora' (fora do horário 10-20h — comportamento esperado), hero 'Salgados fresquinhos direto na sua festa', card 'Monte seu Combo', seção Destaques com produtos, tabs Início/Cardápio/Pedidos/Perfil. (4) Cardápio renderiza com filtros de categoria (Tudo/Combos/Fritos/Congelados/Bebidas/Mini*) e lista de produtos. (5) Pedidos renderiza tela de busca por telefone. (6) Perfil renderiza com atalhos 'Sou Moto Boy' e 'Sou Administrador'. (7) Checkout renderiza com toggle Entrega/Retirar no local (equivalente a 'Retirada' — apenas label diferente), campos de dados do cliente, endereço, mapa. (8) Product detail (/product/{id}) mostra nome, imagem, categoria, descrição, preço, stepper de quantidade (−/+ com 44px+), sabores e botão Adicionar. (9) /staff/admin: sessão anterior ainda válida no localStorage, entrou direto no painel Kanban mostrando as 4 tabs (Todos 200 / Entrega 183 / Retirada 17 / Agendados 200) e cards de pedidos com ações (Atribuir motoboy, Avisar WhatsApp, Imprimir comanda). Login com senha 'neia2026' validado no backend (test_admin_login_success passa). (10) expo.err.log: apenas warning cosmético de ErrorStackParser do Metro, não bloqueia bundle — página carrega 200 e todas rotas navegam OK. Nenhum crash, nenhuma red screen, nenhum erro de bundle bloqueador.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_neia_backend.py",
+    "/app/backend/tests/test_print_and_categories.py",
+    "/app/test_reports/pytest/pytest_iter3.xml"
+  ],
+  "action_items": [
+    "NENHUMA AÇÃO NECESSÁRIA — o relato do usuário 'Não encontrei o app' provavelmente é um mal-entendido de UX (talvez tenha procurado por app store nativo ou não abriu o preview URL). O app web está 100% funcional em https://neia-salgados-app.preview.emergentagent.com/",
+    "OPCIONAL: expo.err.log mostra warning cosmético 'Error: Cannot parse given Error object' no ErrorStackParser do Metro — não bloqueia funcionalidade mas polui logs. Pode ser ignorado ou investigado em próximo ciclo."
+  ],
+  "critical_code_review_comments": [
+    "Backend /api/health responde {status:'ok'} corretamente e é acessível via ingress público.",
+    "Home carrega splash amarelo brevemente e transiciona para conteúdo — comportamento correto.",
+    "Admin panel usa persistência de sessão via localStorage (admin-session), o que faz com que /staff/admin já entre logado se houver sessão anterior — pode ou não ser desejável (considerar timeout de sessão)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (56/56 pytest)", "frontend": "100% (Home, Cardápio, Pedidos, Perfil, Checkout, Product Detail, Admin todos renderizam)"},
+  "seed_data_creation": "Fixture _ensure_seed_motoboys em test_neia_backend.py garante idempotentemente 2 motoboys via POST /api/admin/motoboys (Carlos 11999990001, Marcos 11999990002 senha 1234). Necessária pois backend não faz mais seed automático.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "App está saudável. Suite pytest continua 56/56. Todas rotas do Expo Router funcionam: /, /menu, /orders, /profile, /checkout, /product/{id}, /staff/admin. Warning cosmético do Metro no expo.err.log não afeta funcionalidade. Se usuário reportar 'não encontrei o app' novamente, confirmar que ele está usando a URL de preview e não procurando em app store nativa.",
+  "rca_of_issue": "Relato do usuário 'Não encontrei o app' NÃO se reproduziu. App carrega corretamente em https://neia-salgados-app.preview.emergentagent.com/ com todos elementos esperados. Possíveis causas do relato: (a) usuário procurou app na Play Store/App Store (aplicação está em preview web/Expo Go, não publicada em stores); (b) usuário abriu URL errada; (c) cache do navegador pode ter servido versão antiga — solução: recarregar. Nenhuma correção de código necessária."
+}
