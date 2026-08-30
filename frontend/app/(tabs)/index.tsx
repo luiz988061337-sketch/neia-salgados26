@@ -157,7 +157,7 @@ export default function Home() {
           <View style={styles.heroContent}>
             <View style={styles.heroTag}>
               <Fire color={COLORS.brand} size={14} weight="fill" />
-              <Text style={styles.heroTagText}>Fritura 50 em 50</Text>
+              <Text style={styles.heroTagText}>Frescos e crocantes</Text>
             </View>
             <Text style={styles.heroTitle}>Salgados fresquinhos{"\n"}direto na sua festa</Text>
             <View style={styles.heroCta}>
@@ -177,7 +177,7 @@ export default function Home() {
         >
           <View style={{ flex: 1 }}>
             <Text style={styles.buildTitle}>🥟 Monte seu Combo</Text>
-            <Text style={styles.buildSub}>Escolha os sabores que quiser em múltiplos de 50</Text>
+            <Text style={styles.buildSub}>Escolha os sabores que quiser</Text>
           </View>
           <ArrowRight color={COLORS.surface} size={20} weight="bold" />
         </Pressable>
@@ -220,9 +220,6 @@ export default function Home() {
             >
               <RotatingImage urls={p.image_urls || []} fallback={p.image_url} style={styles.rowImg} contentFit="cover" />
               <View style={{ flex: 1, gap: 4 }}>
-                <View style={styles.badge50}>
-                  <Text style={styles.badge50Text}>50 em 50</Text>
-                </View>
                 <Text style={styles.rowName}>{p.name}</Text>
                 <Text style={styles.rowDesc} numberOfLines={2}>{p.description}</Text>
                 <Text style={styles.rowPrice}>{brl(p.price)}</Text>

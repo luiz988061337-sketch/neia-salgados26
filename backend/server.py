@@ -189,6 +189,7 @@ class Order(BaseModel):
     coupon_code: Optional[str] = None
     referral_code_used: Optional[str] = None
     scheduled_for: Optional[str] = None
+    fulfillment_type: Optional[str] = "delivery"  # "delivery" ou "pickup"
     status: OrderStatus = "recebido"
     motoboy_id: Optional[str] = None
     motoboy_name: Optional[str] = None
@@ -236,6 +237,7 @@ class OrderCreate(BaseModel):
     referral_code_used: Optional[str] = None
     notes: Optional[str] = ""
     scheduled_for: Optional[str] = None
+    fulfillment_type: Optional[str] = "delivery"  # "delivery" ou "pickup"
 
 
 class SettingsIn(BaseModel):
@@ -1216,7 +1218,8 @@ async def create_order(payload: OrderCreate):
             raise HTTPException(400, "Data agendada inválida")
 
     distance_km: Optional[float] = None
-    if payload.customer.delivery_lat is not None and payload.customer.delivery_lng is not None:
+    is_pickup_early = (payload.fulfillment_type or "delivery") == "pickup"
+    if not is_pickup_early and payload.customer.delivery_lat is not None and payload.customer.delivery_lng is not None:
         distance_km = round(
             haversine_km(
                 float(settings["store_lat"]), float(settings["store_lng"]),
@@ -1234,6 +1237,12 @@ async def create_order(payload: OrderCreate):
         if n:
             delivery_fee = float(n["delivery_fee"])
             payload.customer.neighborhood_name = n["name"]
+
+    # Retirada no estabelecimento — sem taxa, sem distância, sem motoboy
+    is_pickup = (payload.fulfillment_type or "delivery") == "pickup"
+    if is_pickup:
+        delivery_fee = 0.0
+        distance_km = None
 
     discount = 0.0
     applied_coupon = None
@@ -1346,6 +1355,7 @@ async def create_order(payload: OrderCreate):
         referral_code_used=referral_used,
         notes=payload.notes,
         scheduled_for=payload.scheduled_for,
+        fulfillment_type=(payload.fulfillment_type or "delivery"),
     )
     await db.orders.insert_one(order.model_dump())
 

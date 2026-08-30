@@ -101,6 +101,7 @@ export type Order = {
   change_for?: number | null;
   coupon_code?: string | null;
   scheduled_for?: string | null;
+  fulfillment_type?: "delivery" | "pickup";
   status: "recebido" | "fritando" | "saiu_entrega" | "entregue" | "cancelado";
   motoboy_id?: string | null;
   motoboy_name?: string | null;

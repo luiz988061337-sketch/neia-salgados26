@@ -220,6 +220,26 @@ class TestBebidasMinimum1:
         assert r.status_code == 400
 
 
+class TestPickup:
+    def test_pickup_no_delivery_fee(self, s, products):
+        combo = next(p for p in products if p["category"] == "combo")
+        p = _make_payload([_make_item(combo, 50)])
+        p["fulfillment_type"] = "pickup"
+        r = s.post(f"{API}/orders", json=p)
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["fulfillment_type"] == "pickup"
+        assert data["delivery_fee"] == 0
+        assert data.get("distance_km") in (None, 0)
+
+    def test_delivery_default(self, s, products):
+        combo = next(p for p in products if p["category"] == "combo")
+        p = _make_payload([_make_item(combo, 50)])
+        r = s.post(f"{API}/orders", json=p)
+        assert r.status_code == 200, r.text
+        assert r.json().get("fulfillment_type", "delivery") == "delivery"
+
+
 # ============ ADMIN ============
 class TestAdmin:
     def test_admin_login_success(self, s):

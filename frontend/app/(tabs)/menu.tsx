@@ -83,11 +83,11 @@ export default function Menu() {
             <RotatingImage urls={item.image_urls || []} fallback={item.image_url} style={styles.img} contentFit="cover" />
             <View style={{ flex: 1, gap: 4 }}>
               <View style={styles.tagRow}>
-                <View style={[styles.tag, item.category === "congelado" ? styles.tagBlue : styles.tagBrand]}>
-                  <Text style={[styles.tagText, item.category === "congelado" ? styles.tagBlueText : styles.tagBrandText]}>
-                    {item.category === "congelado" ? "A partir de 1un" : "50 em 50"}
-                  </Text>
-                </View>
+                {(item.category === "congelado" || item.category === "bebida") && (
+                  <View style={[styles.tag, styles.tagBlue]}>
+                    <Text style={[styles.tagText, styles.tagBlueText]}>A partir de 1un</Text>
+                  </View>
+                )}
               </View>
               <Text style={styles.name}>{item.name}</Text>
               <Text style={styles.desc} numberOfLines={2}>{item.description}</Text>

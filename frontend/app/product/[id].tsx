@@ -88,7 +88,7 @@ export default function ProductDetail() {
           </Pressable>
           <View style={[styles.tag, isBulk ? styles.tagBrand : styles.tagBlue]}>
             <Text style={[styles.tagText, isBulk ? styles.tagBrandText : styles.tagBlueText]}>
-              {isBulk ? "Fritura 50 em 50" : "A partir de 1un"}
+              {isBulk ? "Fresquinhos" : "A partir de 1un"}
             </Text>
           </View>
         </View>
@@ -100,7 +100,7 @@ export default function ProductDetail() {
         </View>
 
         <View style={styles.qtyBlock}>
-          <Text style={styles.blockTitle}>Quantidade{isBulk && " (múltiplos de 50)"}</Text>
+          <Text style={styles.blockTitle}>Quantidade</Text>
           <View style={styles.stepper}>
             <Pressable
               testID="qty-minus"

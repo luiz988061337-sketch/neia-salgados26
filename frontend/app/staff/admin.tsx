@@ -19,6 +19,7 @@ export default function Admin() {
   const [motoboys, setMotoboys] = useState<Motoboy[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [filter, setFilter] = useState<string>("all");
+  const [tab, setTab] = useState<"all" | "delivery" | "pickup" | "scheduled">("all");
   const [assignFor, setAssignFor] = useState<Order | null>(null);
   const [statusFor, setStatusFor] = useState<Order | null>(null);
   const [printers, setPrinters] = useState<any[]>([]);
@@ -49,7 +50,19 @@ export default function Admin() {
     return () => clearInterval(t);
   }, []);
 
-  const filtered = filter === "all" ? orders : orders.filter((o) => o.status === filter);
+  const byTab = orders.filter((o) => {
+    if (tab === "scheduled") return !!o.scheduled_for;
+    if (tab === "delivery") return (o.fulfillment_type || "delivery") === "delivery" && !o.scheduled_for;
+    if (tab === "pickup") return o.fulfillment_type === "pickup" && !o.scheduled_for;
+    return true;
+  });
+  const filtered = filter === "all" ? byTab : byTab.filter((o) => o.status === filter);
+  const counts = {
+    all: orders.length,
+    delivery: orders.filter((o) => (o.fulfillment_type || "delivery") === "delivery" && !o.scheduled_for).length,
+    pickup: orders.filter((o) => o.fulfillment_type === "pickup" && !o.scheduled_for).length,
+    scheduled: orders.filter((o) => !!o.scheduled_for).length,
+  };
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -64,6 +77,29 @@ export default function Admin() {
         <Pressable testID="admin-settings" onPress={() => router.push("/staff/settings")} style={styles.iconBtn}>
           <Gear color={COLORS.onSurface} size={20} weight="regular" />
         </Pressable>
+      </View>
+
+      {/* Tabs de tipo (Entrega / Retirada / Agendados) */}
+      <View style={styles.tabsRow}>
+        {([
+          { id: "all", label: "Todos", emoji: "📋" },
+          { id: "delivery", label: "Entrega", emoji: "🛵" },
+          { id: "pickup", label: "Retirada", emoji: "🏬" },
+          { id: "scheduled", label: "Agendados", emoji: "🗓️" },
+        ] as const).map((t) => {
+          const active = tab === t.id;
+          return (
+            <Pressable
+              key={t.id}
+              testID={`admin-tab-${t.id}`}
+              onPress={() => setTab(t.id)}
+              style={[styles.tabBtn, active && styles.tabBtnActive]}
+            >
+              <Text style={[styles.tabText, active && styles.tabTextActive]}>{t.emoji} {t.label}</Text>
+              <Text style={[styles.tabCount, active && styles.tabCountActive]}>{counts[t.id]}</Text>
+            </Pressable>
+          );
+        })}
       </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
@@ -86,6 +122,12 @@ export default function Admin() {
           <View style={styles.card}>
             <View style={styles.cardHead}>
               <Text style={styles.code}>#{item.short_code}</Text>
+              <View style={styles.badgeRow}>
+                {item.scheduled_for && <View style={styles.typeBadge}><Text style={styles.typeBadgeText}>🗓️ Agendado</Text></View>}
+                {item.fulfillment_type === "pickup"
+                  ? <View style={[styles.typeBadge, styles.typeBadgePickup]}><Text style={styles.typeBadgeText}>🏬 Retirada</Text></View>
+                  : <View style={[styles.typeBadge, styles.typeBadgeDelivery]}><Text style={styles.typeBadgeText}>🛵 Entrega</Text></View>}
+              </View>
               <Text style={styles.time}>{timeAgo(item.created_at)}</Text>
             </View>
             <Text style={styles.customer}>{item.customer.name} • {item.customer.phone}</Text>
@@ -250,6 +292,18 @@ const styles = StyleSheet.create({
   title: { fontSize: 18, fontWeight: "800", color: COLORS.onSurface },
   subtitle: { fontSize: 11, color: COLORS.muted },
   chipRow: { paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm, gap: SPACING.sm },
+  tabsRow: { flexDirection: "row", gap: 4, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  tabBtn: { flex: 1, alignItems: "center", paddingVertical: 8, borderRadius: RADIUS.md, backgroundColor: COLORS.surfaceSecondary, gap: 2 },
+  tabBtnActive: { backgroundColor: COLORS.brand },
+  tabText: { fontSize: 10, fontWeight: "800", color: COLORS.onSurface },
+  tabTextActive: { color: COLORS.surface },
+  tabCount: { fontSize: 14, fontWeight: "800", color: COLORS.onSurface },
+  tabCountActive: { color: COLORS.surface },
+  badgeRow: { flexDirection: "row", gap: 4, flexShrink: 1 },
+  typeBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: RADIUS.pill, backgroundColor: COLORS.surfaceSecondary },
+  typeBadgeText: { fontSize: 10, fontWeight: "800", color: COLORS.onSurface },
+  typeBadgeDelivery: { backgroundColor: COLORS.brandTertiary },
+  typeBadgePickup: { backgroundColor: "#DFF0E7" },
   chip: { height: 36, paddingHorizontal: SPACING.md, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: COLORS.border, alignItems: "center", justifyContent: "center", flexShrink: 0 },
   chipActive: { backgroundColor: COLORS.brand, borderColor: COLORS.brand },
   chipText: { fontSize: 12, fontWeight: "700", color: COLORS.onSurface },

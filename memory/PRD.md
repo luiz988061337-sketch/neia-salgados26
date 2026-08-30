@@ -1,6 +1,32 @@
 # Néia Salgados — PRD
 
-## Última entrega — Rota no motoboy + Link ao cliente
+## Última entrega — Retirada + Painel admin com abas
+
+### 1. Retirada no estabelecimento
+- Novo toggle no checkout: **Entrega** vs **Retirar no local** (2 cards visuais)
+- Modo retirada:
+  - Oculta form de endereço e mapa
+  - Zera taxa de entrega no total
+  - Mostra endereço da loja (settings.store_address) em card amarelo
+  - Não valida distância nem exige coordenadas GPS
+- Backend: `OrderCreate.fulfillment_type` = "delivery" (default) ou "pickup"
+- Order guarda `fulfillment_type`; se pickup, `delivery_fee=0` e `distance_km=None`
+
+### 2. Painel admin com abas
+- Nova barra de tabs em `/staff/admin`: **📋 Todos • 🛵 Entrega • 🏬 Retirada • 🗓️ Agendados**
+- Cada tab mostra contador de pedidos correspondentes
+- Filtro combinado: primeiro por tipo (entrega/retirada/agendado), depois por status (chips embaixo)
+- Cada card de pedido tem badge do tipo (🛵 Entrega ou 🏬 Retirada, e 🗓️ Agendado se aplicável)
+
+### 3. Cardápio limpo
+- Removidas todas as menções de "múltiplos de 50", "50 em 50", "Fritura 50 em 50" da UI
+- Regras 50-em-50 continuam sendo aplicadas silenciosamente pelo backend + validação de step no stepper
+- Tags do card: "A partir de 1un" para bebidas/congelados, "Fresquinhos" para combos/fritos
+
+### 4. Testes
+- 55/55 backend passando (2 novos testes cobrindo pickup: taxa zero + delivery é default)
+
+## Entrega anterior — Refrigerantes 1 em 1
 
 ### 1. Botão "Abrir rota no maps" no motoboy
 - Cada card de pedido na tela `/staff/motoboy` agora tem 2 formas de abrir a rota:

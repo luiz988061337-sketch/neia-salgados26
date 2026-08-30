@@ -33,6 +33,7 @@ export default function Checkout() {
   const [couponPct, setCouponPct] = useState(0);
   const [notes, setNotes] = useState("");
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [fulfillment, setFulfillment] = useState<"delivery" | "pickup">("delivery");
   const [scheduled, setScheduled] = useState<Date>(() => {
     const d = new Date(); d.setMinutes(0, 0, 0); d.setHours(d.getHours() + 3); return d;
   });
@@ -56,13 +57,14 @@ export default function Checkout() {
   }, []));
 
   const subtotal = items.reduce((s, i) => s + i.subtotal, 0);
-  const distanceKm = lat && lng && settings
+  const isPickup = fulfillment === "pickup";
+  const distanceKm = !isPickup && lat && lng && settings
     ? Number(haversineKm(settings.store_lat, settings.store_lng, lat, lng).toFixed(2))
     : null;
-  const delivery = settings ? computeFee(distanceKm, settings) : 8;
+  const delivery = isPickup ? 0 : (settings ? computeFee(distanceKm, settings) : 8);
   const discount = Number((subtotal * (couponPct / 100)).toFixed(2));
   const total = subtotal + delivery - discount;
-  const outOfRange = settings && distanceKm != null && distanceKm > settings.max_delivery_km;
+  const outOfRange = !isPickup && settings && distanceKm != null && distanceKm > settings.max_delivery_km;
 
   const applyCoupon = async () => {
     if (!coupon) return;
@@ -73,16 +75,26 @@ export default function Checkout() {
   };
 
   const submit = async () => {
-    if (!name || !phone || !address) { setError("Preencha nome, telefone e endereço"); return; }
-    if (!lat || !lng) { setError("Defina o local de entrega no mapa"); return; }
-    if (outOfRange) { setError("Endereço fora da área de entrega"); return; }
+    if (!name || !phone) { setError("Preencha nome e telefone"); return; }
+    if (!isPickup) {
+      if (!address) { setError("Preencha o endereço de entrega"); return; }
+      if (!lat || !lng) { setError("Defina o local de entrega no mapa"); return; }
+      if (outOfRange) { setError("Endereço fora da área de entrega"); return; }
+    }
     if (store && !store.is_open && !scheduleEnabled) {
-      setError("Loja fechada — agende sua entrega para outro horário");
+      setError("Loja fechada — agende para outro horário");
       return;
     }
     setSubmitting(true); setError("");
     try {
-      const cust = { name, phone, address, complement, delivery_lat: lat, delivery_lng: lng, birthday };
+      const cust: any = { name, phone, birthday };
+      if (isPickup) {
+        cust.address = settings?.store_address || "Retirada no estabelecimento";
+        cust.complement = "";
+      } else {
+        cust.address = address; cust.complement = complement;
+        cust.delivery_lat = lat; cust.delivery_lng = lng;
+      }
       await saveCustomer(cust);
       const order = await api.createOrder({
         customer: cust, items, payment_method: payment,
@@ -91,7 +103,8 @@ export default function Checkout() {
         referral_code_used: referralCode.trim() || null,
         notes,
         scheduled_for: scheduleEnabled ? scheduled.toISOString() : null,
-      });
+        fulfillment_type: fulfillment,
+      } as any);
       await clearCart();
       router.replace({ pathname: "/order/[id]", params: { id: order.id } });
     } catch (e: any) {
@@ -137,28 +150,61 @@ export default function Checkout() {
           />
         </Section>
 
-        <Section title="Endereço de entrega">
-          <Input testID="address-input" label="Rua, número, bairro, cidade" value={address} onChangeText={setAddress} multiline />
-          <Input testID="complement-input" label="Complemento (apto, referência)" value={complement} onChangeText={setComplement} />
-        </Section>
-
-        <Section title="Localização no mapa">
-          {settings && (
-            <LocationPicker
-              lat={lat} lng={lng}
-              storeLat={settings.store_lat} storeLng={settings.store_lng}
-              onChange={(la, ln) => { setLat(la); setLng(ln); }}
-            />
-          )}
-          {distanceKm != null && (
-            <View style={[styles.distancePill, outOfRange && { backgroundColor: "#F3D8D3" }]}>
-              <Text style={[styles.distanceText, outOfRange && { color: COLORS.error }]}>
-                {distanceKm} km da loja • Taxa {brl(delivery)}
-                {outOfRange && " (fora da área)"}
-              </Text>
+        <Section title="Como você quer receber?">
+          <View style={styles.fulfRow}>
+            <Pressable
+              testID="fulf-delivery"
+              onPress={() => setFulfillment("delivery")}
+              style={[styles.fulfCard, !isPickup && styles.fulfCardOn]}
+            >
+              <Text style={styles.fulfIcon}>🛵</Text>
+              <Text style={[styles.fulfTitle, !isPickup && styles.fulfTitleOn]}>Entrega</Text>
+              <Text style={styles.fulfSub}>Levamos até você</Text>
+            </Pressable>
+            <Pressable
+              testID="fulf-pickup"
+              onPress={() => setFulfillment("pickup")}
+              style={[styles.fulfCard, isPickup && styles.fulfCardOn]}
+            >
+              <Text style={styles.fulfIcon}>🏬</Text>
+              <Text style={[styles.fulfTitle, isPickup && styles.fulfTitleOn]}>Retirar no local</Text>
+              <Text style={styles.fulfSub}>Sem taxa de entrega</Text>
+            </Pressable>
+          </View>
+          {isPickup && (
+            <View style={styles.pickupInfo}>
+              <Text style={styles.pickupText}>📍 {settings?.store_address || "Néia Salgados"}</Text>
+              <Text style={styles.pickupSub}>Traga o número do pedido ao balcão.</Text>
             </View>
           )}
         </Section>
+
+        {!isPickup && (
+          <>
+            <Section title="Endereço de entrega">
+              <Input testID="address-input" label="Rua, número, bairro, cidade" value={address} onChangeText={setAddress} multiline />
+              <Input testID="complement-input" label="Complemento (apto, referência)" value={complement} onChangeText={setComplement} />
+            </Section>
+
+            <Section title="Localização no mapa">
+              {settings && (
+                <LocationPicker
+                  lat={lat} lng={lng}
+                  storeLat={settings.store_lat} storeLng={settings.store_lng}
+                  onChange={(la, ln) => { setLat(la); setLng(ln); }}
+                />
+              )}
+              {distanceKm != null && (
+                <View style={[styles.distancePill, outOfRange && { backgroundColor: "#F3D8D3" }]}>
+                  <Text style={[styles.distanceText, outOfRange && { color: COLORS.error }]}>
+                    {distanceKm} km da loja • Taxa {brl(delivery)}
+                    {outOfRange && " (fora da área)"}
+                  </Text>
+                </View>
+              )}
+            </Section>
+          </>
+        )}
 
         <Section title="Agendar entrega (opcional)">
           <Pressable testID="schedule-toggle" onPress={() => setScheduleEnabled((v) => !v)} style={[styles.toggleCard, scheduleEnabled && styles.toggleCardOn]}>
@@ -294,6 +340,16 @@ const styles = StyleSheet.create({
   fieldLabel: { fontSize: 11, fontWeight: "700", color: COLORS.muted },
   textInput: { backgroundColor: COLORS.surfaceSecondary, borderRadius: RADIUS.md, paddingHorizontal: SPACING.md, paddingVertical: 12, fontSize: 14, color: COLORS.onSurface, minHeight: 44 },
   distancePill: { alignSelf: "flex-start", paddingHorizontal: SPACING.md, paddingVertical: 8, borderRadius: RADIUS.pill, backgroundColor: COLORS.brandTertiary },
+  fulfRow: { flexDirection: "row", gap: SPACING.sm },
+  fulfCard: { flex: 1, alignItems: "center", padding: SPACING.md, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface, gap: 4 },
+  fulfCardOn: { borderColor: COLORS.brand, backgroundColor: COLORS.brandTertiary, borderWidth: 2 },
+  fulfIcon: { fontSize: 26 },
+  fulfTitle: { fontSize: 13, fontWeight: "800", color: COLORS.onSurface },
+  fulfTitleOn: { color: COLORS.brand },
+  fulfSub: { fontSize: 10, color: COLORS.muted, textAlign: "center" },
+  pickupInfo: { padding: SPACING.md, borderRadius: RADIUS.md, backgroundColor: "#FFF8E7", borderWidth: 1, borderColor: COLORS.warning, marginTop: SPACING.sm },
+  pickupText: { fontSize: 13, fontWeight: "800", color: COLORS.onSurface },
+  pickupSub: { fontSize: 11, color: COLORS.muted, marginTop: 2 },
   distanceText: { fontSize: 12, fontWeight: "800", color: COLORS.onBrandTertiary },
   toggleCard: { flexDirection: "row", alignItems: "center", gap: SPACING.md, padding: SPACING.md, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface },
   toggleCardOn: { borderColor: COLORS.brand, backgroundColor: COLORS.brandTertiary },
