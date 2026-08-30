@@ -1,0 +1,163 @@
+{
+  "app_name": "Néia Salgados",
+  "personality": "1 iOS-Native Clean (Warm Appetizing variation)",
+  "personality_one_liner": "A warm, appetizing, and highly legible iOS-native ordering experience that makes buying party combos fast and intuitive.",
+  "color": {
+    "surface": "#FCFBF8",
+    "onSurface": "#1C1917",
+    "surfaceSecondary": "#F5EFE8",
+    "onSurfaceSecondary": "#292524",
+    "surfaceTertiary": "#EAE0D5",
+    "onSurfaceTertiary": "#3E3834",
+    "surfaceInverse": "#292524",
+    "onSurfaceInverse": "#FCFBF8",
+    "brand": "#C24127",
+    "brandPrimary": "#C24127",
+    "onBrandPrimary": "#FCFBF8",
+    "brandSecondary": "#D46048",
+    "onBrandSecondary": "#FCFBF8",
+    "brandTertiary": "#FADED9",
+    "onBrandTertiary": "#992E1A",
+    "success": "#327A5B",
+    "onSuccess": "#FCFBF8",
+    "warning": "#C48A2D",
+    "onWarning": "#1C1917",
+    "error": "#B83B22",
+    "onError": "#FCFBF8",
+    "info": "#475E69",
+    "onInfo": "#FCFBF8",
+    "border": "#EAE0D5",
+    "borderStrong": "#C7B8AA",
+    "divider": "#EAE0D5"
+  },
+  "typography": {
+    "displayFontFamily": "SpaceGrotesk",
+    "textFontFamily": "PlusJakartaSans",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Handle spacing correctly dont have extra spaces where its not required, handle padding and margin corectly and subtle for buttons and components",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 6,
+    "md": 12,
+    "lg": 20,
+    "pill": 999
+  },
+  "shadow_tier": 1,
+  "navigation": "bottom_tabs",
+  "icon_set": "Phosphor",
+  "glassmorphism": {
+    "enabled": true,
+    "do's": [
+      "Sticky headers over scrolling catalog list",
+      "Bottom tab bar background",
+      "Featured combo card text overlays (Apple-style blur)",
+      "Floating action buttons"
+    ],
+    "dont's": [
+      "Body content cards",
+      "Form inputs",
+      "General list rows"
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Home / Catálogo",
+      "purpose": "Showcase appetizing combos and menus, driving users to build their party order.",
+      "states": {
+        "loading": "Skeleton grids representing category chips and product cards.",
+        "empty": "N/A - Menu always exists.",
+        "error": "Failed to load menu. Retry button."
+      },
+      "layout": "Sticky header with logo and cart icon. Horizontal scrolling category chips (Combos, Fritos, Congelados). Vertical list of product cards with appetizing images. Use '50 em 50' badges on fried items using brandTertiary background. Cards use single column, 100% width minus padding, to let food photography shine."
+    },
+    {
+      "name": "Combo Builder (Product Detail)",
+      "purpose": "Allow users to assemble their 50-by-50 combinations flawlessly.",
+      "states": {
+        "loading": "Spinner over skeleton steppers.",
+        "empty": "N/A",
+        "error": "Error fetching product details."
+      },
+      "layout": "Full screen sheet or modal. Hero image at top with gradient scrim. Steppers for different flavors (Coxinha, Kibe, etc.). A sticky floating bar at the bottom showing a progress meter out of 50 (e.g., '30/50 Selecionados') and the 'Adicionar' CTA button which is disabled until the count reaches a multiple of 50."
+    },
+    {
+      "name": "Carrinho & Checkout",
+      "purpose": "Streamlined guest checkout for rapid ordering.",
+      "states": {
+        "loading": "Spinner during order submission.",
+        "empty": "Illustration of an empty basket + 'Adicionar salgados' CTA.",
+        "error": "Validation error text inline near missing fields."
+      },
+      "layout": "List of cart items at top. Form fields below for Guest details (Nome, Celular, Endereço completo). Segmented control or radio list for payment (Pix, Dinheiro c/ troco, Cartão na Entrega). Sticky primary CTA 'Finalizar Pedido' at the bottom."
+    },
+    {
+      "name": "Pedidos & Rastreamento (Order Status)",
+      "purpose": "Real-time visibility into order prep and live motoboy tracking.",
+      "states": {
+        "loading": "Centered spinner.",
+        "empty": "Illustration showing no active orders.",
+        "error": "Failed to load order status."
+      },
+      "layout": "Top half: vertical timeline (Recebido -> Fritando -> Saiu -> Entregue). If 'Saiu', transition top half to a live map view with a custom Motoboy marker. Bottom half: Order summary card overlaid on map using Glassmorphism."
+    },
+    {
+      "name": "Área Admin / Motoboy",
+      "purpose": "Operational control for staff (hidden behind password login in profile).",
+      "states": {
+        "loading": "Spinner.",
+        "empty": "No active orders for motoboy / kanban empty.",
+        "error": "Network error."
+      },
+      "layout": "Simple list of assigned orders for Motoboy with large 'Iniciar Entrega' (triggers GPS tracking). Admin sees a Kanban board (Novos, Fritando, Entrega) to manage workflow."
+    }
+  ],
+  "images": {
+    "hero_coxinha_combo": {
+      "url": "https://images.unsplash.com/photo-1641848462741-982725a92e49?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA3MDR8MHwxfHNlYXJjaHw0fHxicmF6aWxpYW4lMjBjb3hpbmhhJTIwc2FsZ2FkaW5ob3N8ZW58MHx8fHwxNzg4MDU4MDY2fDA&ixlib=rb-4.1.0&q=85",
+      "alt": "A black plate topped with fresh Brazilian coxinhas"
+    },
+    "hero_salgadinhos_basket": {
+      "url": "https://images.unsplash.com/photo-1598142982901-df6cec10ae35?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA3MDR8MHwxfHNlYXJjaHwxfHxicmF6aWxpYW4lMjBjb3hpbmhhJTIwc2FsZ2FkaW5ob3N8ZW58MHx8fHwxNzg4MDU4MDY2fDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Basket filled with traditional Brazilian snacks"
+    },
+    "hero_combo_fritos": {
+      "url": "https://images.unsplash.com/photo-1623653387945-2fd25214f8fc?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzd8MHwxfHNlYXJjaHwyfHxhcHBldGl6aW5nJTIwZnJpZWQlMjBzbmFja3N8ZW58MHx8fHwxNzg4MDU4MDY2fDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Combo tray of fried snacks and sauces"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Strictly follow the color palette. Use the Rust/Cinnamon base (#C24127) as primary CTA color to stimulate appetite. Do not use generic reds.",
+    "Implement the '50 by 50' logic robustly in the Combo Builder screen. Provide a clear visual progress meter for the user (e.g., '10/50').",
+    "Use Phosphor icons. Sizes must be restricted to 12, 16, 20, 24, 32, or 48. Do NOT mix styles.",
+    "The Guest Checkout flow should use un-authenticated state management for saving address and phone numbers locally for the next time.",
+    "Ensure the tracker map has a custom marker for the motoboy and provides an Apple-style blur glass sheet over the bottom to show order metadata.",
+    "Add a discrete button/link in the Perfil section for Admin/Motoboy login, shielded by a simple password input to route to internal stack."
+  ]
+}
