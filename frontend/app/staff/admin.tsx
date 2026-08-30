@@ -52,15 +52,15 @@ export default function Admin() {
 
   const byTab = orders.filter((o) => {
     if (tab === "scheduled") return !!o.scheduled_for;
-    if (tab === "delivery") return (o.fulfillment_type || "delivery") === "delivery" && !o.scheduled_for;
-    if (tab === "pickup") return o.fulfillment_type === "pickup" && !o.scheduled_for;
+    if (tab === "delivery") return (o.fulfillment_type || "delivery") === "delivery";
+    if (tab === "pickup") return o.fulfillment_type === "pickup";
     return true;
   });
   const filtered = filter === "all" ? byTab : byTab.filter((o) => o.status === filter);
   const counts = {
     all: orders.length,
-    delivery: orders.filter((o) => (o.fulfillment_type || "delivery") === "delivery" && !o.scheduled_for).length,
-    pickup: orders.filter((o) => o.fulfillment_type === "pickup" && !o.scheduled_for).length,
+    delivery: orders.filter((o) => (o.fulfillment_type || "delivery") === "delivery").length,
+    pickup: orders.filter((o) => o.fulfillment_type === "pickup").length,
     scheduled: orders.filter((o) => !!o.scheduled_for).length,
   };
 
@@ -138,6 +138,9 @@ export default function Admin() {
                 🗓️ Agendado {new Date(item.scheduled_for).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
               </Text>
             )}
+            {item.eta_min && (item.status === "recebido" || item.status === "fritando") ? (
+              <Text style={styles.metaEta}>⏱️ ~{item.eta_min} min ({item.fulfillment_type === "pickup" ? "retirada" : "entrega"})</Text>
+            ) : null}
             <Text style={styles.itemsLine}>
               {item.items.map((i) => `${i.quantity}x ${i.product_name}`).join(", ")}
             </Text>
@@ -317,6 +320,7 @@ const styles = StyleSheet.create({
   address: { fontSize: 12, color: COLORS.muted },
   meta: { fontSize: 11, color: COLORS.info, fontWeight: "700", marginTop: 2 },
   metaSchedule: { fontSize: 11, color: COLORS.warning, fontWeight: "800", marginTop: 2 },
+  metaEta: { fontSize: 11, color: COLORS.success, fontWeight: "800", marginTop: 2 },
   itemsLine: { fontSize: 12, color: COLORS.onSurfaceSecondary, marginTop: 4 },
   footRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 4 },
   total: { fontSize: 14, fontWeight: "800", color: COLORS.brand },

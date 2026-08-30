@@ -190,6 +190,7 @@ class Order(BaseModel):
     referral_code_used: Optional[str] = None
     scheduled_for: Optional[str] = None
     fulfillment_type: Optional[str] = "delivery"  # "delivery" ou "pickup"
+    eta_min: Optional[int] = None                 # tempo estimado em minutos (calc no create)
     status: OrderStatus = "recebido"
     motoboy_id: Optional[str] = None
     motoboy_name: Optional[str] = None
@@ -259,7 +260,9 @@ class SettingsIn(BaseModel):
     loyalty_active: Optional[bool] = None
     loyalty_points_per_real: Optional[float] = None
     loyalty_tiers: Optional[List[dict]] = None
-    logo_url: Optional[str] = None  # Path relativo (/api/files/...) para assinatura no WhatsApp
+    logo_url: Optional[str] = None
+    pickup_eta_min: Optional[int] = None    # tempo estimado de retirada (min)
+    delivery_eta_min: Optional[int] = None  # tempo estimado de entrega (min)
 
 
 class ChatMessageIn(BaseModel):
@@ -460,6 +463,8 @@ async def get_settings() -> dict:
             {"points": 300, "discount_pct": 15},
             {"points": 500, "discount_pct": 25},
         ],
+        "pickup_eta_min": 30,
+        "delivery_eta_min": 45,
     }
     await db.settings.insert_one(default)
     return default
@@ -1035,6 +1040,8 @@ async def get_public_settings():
         "loyalty_points_per_real": float(s.get("loyalty_points_per_real", 1.0)),
         "loyalty_tiers": s.get("loyalty_tiers", []),
         "logo_url": s.get("logo_url", ""),
+        "pickup_eta_min": int(s.get("pickup_eta_min", 30)),
+        "delivery_eta_min": int(s.get("delivery_eta_min", 45)),
     }
 
 
@@ -1356,8 +1363,31 @@ async def create_order(payload: OrderCreate):
         notes=payload.notes,
         scheduled_for=payload.scheduled_for,
         fulfillment_type=(payload.fulfillment_type or "delivery"),
+        eta_min=int(settings.get("pickup_eta_min", 30) if (payload.fulfillment_type or "delivery") == "pickup" else settings.get("delivery_eta_min", 45)),
     )
     await db.orders.insert_one(order.model_dump())
+
+    # WhatsApp de confirmação com ETA
+    if settings.get("auto_whatsapp") and twilio_ready() and payload.customer.whatsapp_opt_in:
+        is_pickup = order.fulfillment_type == "pickup"
+        eta = int(order.eta_min or 0)
+        eta_line = f"\n⏱️ Previsão de {'retirada' if is_pickup else 'entrega'}: *~{eta} min*." if eta > 0 else ""
+        addr_line = f"\n📍 Retire em: {settings.get('store_address', '')}" if is_pickup else ""
+        msg = (
+            f"🥟 Olá {payload.customer.name}! Recebemos seu pedido *#{order.short_code}*.\n"
+            f"Total: *R$ {order.total:.2f}* ({order.payment_method}){eta_line}{addr_line}\n\n"
+            f"— *Néia Salgados* — O sabor que faz a diferença 💛"
+        )
+        try:
+            media = await _brand_media_url()
+            _r = send_whatsapp(payload.customer.phone, body=msg, media_url=media)
+            await db.message_logs.insert_one({
+                "id": str(uuid.uuid4()), "kind": "order_received", "order_id": order.id,
+                "phone": payload.customer.phone, "result": _r,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+        except Exception:
+            pass
 
     # Incrementar uses_count do cupom se foi aplicado (por código real, não bulk/aniv/indic)
     if applied_coupon and not applied_coupon.startswith(("LOTE", "ANIVERSARIO", "INDIC")):
@@ -1594,17 +1624,32 @@ async def admin_update_status(order_id: str, body: StatusUpdate):
         )
     if settings.get("auto_whatsapp") and twilio_ready() and order:
         if order["customer"].get("whatsapp_opt_in", True):
+            is_pickup = (order.get("fulfillment_type") or "delivery") == "pickup"
+            eta = int(order.get("eta_min") or 0)
             if body.status == "saiu_entrega":
-                # Enviar mensagem com link de acompanhamento
-                r2 = await notify_customer_out_for_delivery(order)
+                if is_pickup:
+                    # Para retirada: aviso "pronto pra retirada"
+                    msg = (
+                        f"🎉 Olá {order['customer']['name']}! Seu pedido *#{order['short_code']}* está *PRONTO*!\n"
+                        f"📍 Retire em: {settings.get('store_address', 'Néia Salgados')}\n\n"
+                        f"— *Néia Salgados* — O sabor que faz a diferença 💛"
+                    )
+                    media = await _brand_media_url()
+                    r2 = send_whatsapp(order["customer"]["phone"], body=msg, media_url=media)
+                else:
+                    r2 = await notify_customer_out_for_delivery(order)
             else:
                 labels = {"recebido": "🥟 recebido", "fritando": "🔥 em preparo",
                           "saiu_entrega": "🛵 saiu para entrega", "entregue": "✅ entregue",
                           "cancelado": "❌ cancelado"}
                 label = labels.get(body.status, body.status)
+                # ETA no primeiro aviso
+                eta_line = ""
+                if body.status == "recebido" and eta > 0:
+                    eta_line = f"\n⏱️ Previsão: *~{eta} min* para {'retirada' if is_pickup else 'entrega'}."
                 msg = (
                     f"Olá {order['customer']['name']}! Seu pedido *#{order['short_code']}* na Néia Salgados "
-                    f"está {label}.\n\n"
+                    f"está {label}.{eta_line}\n\n"
                     f"— *Néia Salgados* — O sabor que faz a diferença 💛"
                 )
                 media = await _brand_media_url()

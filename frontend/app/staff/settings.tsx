@@ -1,7 +1,7 @@
 import { useRouter } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ArrowLeft, CaretRight, ChartBar, Crown, ForkKnife, Gift, MapPin, Motorcycle, Printer, Ranking, Sparkle, Storefront, Ticket, Trophy } from "phosphor-react-native";
+import { ArrowLeft, CaretRight, ChartBar, Crown, ForkKnife, Gift, MapPin, Motorcycle, Printer, Ranking, Sparkle, Storefront, Ticket, Timer, Trophy } from "phosphor-react-native";
 
 import { COLORS, RADIUS, SPACING } from "@/src/theme";
 
@@ -54,6 +54,13 @@ export default function StaffSettings() {
           title="Plano de Fidelidade"
           subtitle="Editar pontos por real e níveis de resgate"
           onPress={() => router.push("/staff/loyalty")}
+        />
+        <Row
+          testID="go-eta"
+          icon={<Timer color={COLORS.brand} size={22} weight="fill" />}
+          title="Prazos de Entrega e Retirada"
+          subtitle="Editar tempo estimado enviado ao cliente"
+          onPress={() => router.push("/staff/eta")}
         />
         <Row
           testID="go-vip"

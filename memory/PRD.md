@@ -1,6 +1,31 @@
 # Néia Salgados — PRD
 
-## Última entrega — Retirada + Painel admin com abas
+## Última entrega — Disparo automático + Prazos + Retirada pronta
+
+### 1. Disparo automático WhatsApp (a cada status)
+Backend já dispara mensagens ao cliente automaticamente quando:
+- **Pedido criado**: "🥟 Recebemos seu pedido #XXXX... ⏱️ Previsão: ~30/45 min"
+- **fritando**: "🔥 Seu pedido está em preparo"
+- **saiu_entrega (entrega)**: "🛵 Saiu para entrega com {motoboy}" + link tracking
+- **saiu_entrega (retirada)**: "🎉 Seu pedido está PRONTO para retirada! Passe no balcão em {endereço}"
+- **entregue**: "✅ Pedido entregue!"
+- **cancelado**: "❌ Pedido cancelado"
+
+Controlado por `settings.auto_whatsapp` (toggle em `/staff/store`). Se Twilio configurado, servidor envia direto; sem Twilio, admin abre wa.me pré-preenchido ao mudar status.
+
+### 2. Prazos editáveis
+- Nova tela `/staff/eta` — Admin edita **Prazo de entrega** e **Prazo de retirada** (em minutos)
+- Backend armazena `pickup_eta_min` (default 30) e `delivery_eta_min` (default 45) em settings
+- Cada pedido novo salva `eta_min` conforme o tipo (pickup ou delivery)
+- ETA aparece:
+  - Na mensagem WhatsApp automática de confirmação
+  - No card de tracking do cliente (badge verde "⏱️ ~30 min")
+  - No card admin do kanban
+
+### 3. Testes
+- 56/56 backend passando (novo teste `test_eta_min_populated`)
+
+## Entrega anterior — Retirada + Painel admin com abas
 
 ### 1. Retirada no estabelecimento
 - Novo toggle no checkout: **Entrega** vs **Retirar no local** (2 cards visuais)

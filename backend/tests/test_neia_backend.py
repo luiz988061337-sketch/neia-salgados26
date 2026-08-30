@@ -239,6 +239,22 @@ class TestPickup:
         assert r.status_code == 200, r.text
         assert r.json().get("fulfillment_type", "delivery") == "delivery"
 
+    def test_eta_min_populated(self, s, products):
+        # Ajusta configurações
+        s.patch(f"{API}/admin/settings", json={"pickup_eta_min": 25, "delivery_eta_min": 55})
+        combo = next(p for p in products if p["category"] == "combo")
+        p_pickup = _make_payload([_make_item(combo, 50)])
+        p_pickup["fulfillment_type"] = "pickup"
+        r1 = s.post(f"{API}/orders", json=p_pickup)
+        assert r1.status_code == 200
+        assert r1.json().get("eta_min") == 25
+        p_deliv = _make_payload([_make_item(combo, 50)])
+        r2 = s.post(f"{API}/orders", json=p_deliv)
+        assert r2.status_code == 200
+        assert r2.json().get("eta_min") == 55
+        # restaura defaults
+        s.patch(f"{API}/admin/settings", json={"pickup_eta_min": 30, "delivery_eta_min": 45})
+
 
 # ============ ADMIN ============
 class TestAdmin:

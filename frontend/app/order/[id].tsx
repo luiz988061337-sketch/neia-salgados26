@@ -126,6 +126,14 @@ export default function OrderTracking() {
           </View>
         )}
 
+        {(order.eta_min && (order.status === "recebido" || order.status === "fritando")) ? (
+          <View style={styles.etaBadge}>
+            <Text style={styles.etaText}>
+              ⏱️ {order.fulfillment_type === "pickup" ? "Pronto para retirada em" : "Previsão de entrega"} *~{order.eta_min} min*
+            </Text>
+          </View>
+        ) : null}
+
         {/* Timeline */}
         <View style={styles.timeline}>
           <Text style={styles.blockTitle}>Status do Pedido</Text>
@@ -260,6 +268,8 @@ const styles = StyleSheet.create({
   starBtn: { padding: 4 },
   scheduleBadge: { marginHorizontal: SPACING.lg, marginTop: SPACING.md, padding: SPACING.md, borderRadius: RADIUS.md, backgroundColor: "#FFE9D3" },
   scheduleText: { color: COLORS.warning, fontWeight: "800", fontSize: 13, textAlign: "center" },
+  etaBadge: { marginHorizontal: SPACING.lg, marginTop: SPACING.sm, padding: SPACING.md, borderRadius: RADIUS.md, backgroundColor: "#DFF0E7", borderWidth: 1, borderColor: COLORS.success },
+  etaText: { color: COLORS.success, fontWeight: "800", fontSize: 13, textAlign: "center" },
   blockTitle: { fontSize: 14, fontWeight: "800", color: COLORS.onSurface },
   timeline: { padding: SPACING.lg },
   step: { flexDirection: "row", alignItems: "center", gap: SPACING.md },

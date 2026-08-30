@@ -60,6 +60,8 @@ export type Settings = {
   loyalty_active?: boolean;
   loyalty_points_per_real?: number;
   loyalty_tiers?: LoyaltyTier[];
+  pickup_eta_min?: number;
+  delivery_eta_min?: number;
 };
 export type StoreStatus = { is_open: boolean; open_days: number[]; open_time: string; close_time: string; bulk_tiers?: BulkTier[] };
 export type BirthdayCustomer = { phone: string; name: string; birthday: string; whatsapp_opt_in?: boolean };
@@ -102,6 +104,7 @@ export type Order = {
   coupon_code?: string | null;
   scheduled_for?: string | null;
   fulfillment_type?: "delivery" | "pickup";
+  eta_min?: number | null;
   status: "recebido" | "fritando" | "saiu_entrega" | "entregue" | "cancelado";
   motoboy_id?: string | null;
   motoboy_name?: string | null;
